@@ -1,11 +1,8 @@
+const auth = require('../../utils/auth')
+
 Page({
   data: { user: {}, stats: {}, classes: [], recentRisks: [] },
-  onShow() { if (!this.requireRole()) return; this.loadDashboard() },
-  requireRole() {
-    const user = wx.getStorageSync("userInfo") || {}
-    if (user.role !== "counselor") { wx.reLaunch({ url: "/pages/login/login" }); return false }
-    this.setData({ user }); return true
-  },
+  onShow() { const user = auth.requireRole('counselor'); if (!user) return; this.setData({ user }); this.loadDashboard() },
   loadDashboard() {
     const students = wx.getStorageSync("classStudents") || []
     const risks = wx.getStorageSync("riskEvents") || []
@@ -28,5 +25,5 @@ Page({
   goClass(e) { wx.navigateTo({ url: "/pages/counselor/class-detail?id=" + e.currentTarget.dataset.id }) },
   goRisks() { wx.navigateTo({ url: "/pages/counselor/risks" }) },
   goContent() { wx.navigateTo({ url: "/pages/counselor/content" }) },
-  logout() { wx.removeStorageSync("userInfo"); wx.reLaunch({ url: "/pages/login/login" }) }
+  logout() { auth.clearSession("辅导员主动退出"); wx.reLaunch({ url: "/pages/login/login" }) }
 })

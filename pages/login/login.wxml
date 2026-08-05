@@ -9,24 +9,25 @@
     <view class="role-tabs">
       <view wx:for="{{roleOptions}}" wx:key="value" class="role-tab {{role === item.value ? 'active' : ''}}" data-role="{{item.value}}" bindtap="onRoleTap">{{item.label}}</view>
     </view>
+    <view class="role-description">{{roleDescription}}</view>
 
     <view class="input-group">
       <view class="input-label">{{accountLabel}}</view>
       <view class="input-wrapper">
         <van-icon name="user-o" size="18px" color="#999" />
-        <input class="login-input" type="text" placeholder="请输入{{accountLabel}}" value="{{accountId}}" bindinput="onAccountInput" maxlength="20" />
+        <input class="login-input" type="text" placeholder="{{accountPlaceholder}}" value="{{accountId}}" bindinput="onAccountInput" maxlength="20" disabled="{{loading}}" confirm-type="next" />
       </view>
     </view>
     <view class="input-group">
       <view class="input-label">独立密码</view>
       <view class="input-wrapper">
         <van-icon name="lock" size="18px" color="#999" />
-        <input class="login-input" type="password" placeholder="请输入本系统独立密码" value="{{password}}" bindinput="onPasswordInput" maxlength="20" />
+        <input class="login-input" type="text" password="{{!showPassword}}" placeholder="请输入本系统独立密码" value="{{password}}" bindinput="onPasswordInput" bindconfirm="onLogin" maxlength="32" disabled="{{loading}}" confirm-type="done" />
+        <view class="password-toggle" bindtap="togglePassword" aria-label="{{showPassword ? '隐藏密码' : '显示密码'}}">
+          <van-icon name="{{showPassword ? 'eye-o' : 'closed-eye'}}" size="18px" color="#999" />
+        </view>
       </view>
     </view>
-
-    <view class="error-msg" wx:if="{{loginError}}">{{loginError}}</view>
-    <view class="login-btn {{loading ? 'loading' : ''}}" bindtap="onLogin">{{loading ? '验证中...' : '登录'}}</view>
 
     <view class="agreement-section">
       <van-checkbox value="{{agreed}}" bind:change="onAgreementChange" shape="square" icon-size="14px" />
@@ -34,9 +35,14 @@
       <text class="agreement-link" bindtap="viewAgreement">《隐私政策与敏感信息说明》</text>
     </view>
 
+    <view class="error-msg" wx:if="{{loginError}}" role="alert">{{loginError}}</view>
+    <view class="login-btn {{loading ? 'loading' : ''}}" bindtap="onLogin">{{loading ? '验证中…' : '登录'}}</view>
+
     <view class="demo-accounts">
       <text class="demo-title">本地演示账号（密码均为 123456）</text>
-      <text>学生：2024001　辅导员：T001　管理员：admin</text>
+      <text>学生：2024001 / 2024002</text>
+      <text>辅导员：T001　管理员：admin</text>
+      <text class="demo-note">连续输错 5 次将锁定该账号 60 秒；正式版本需接入学校认证后端。</text>
     </view>
   </view>
 
@@ -47,6 +53,7 @@
       <text class="logo-subtitle">校内身份验证成功</text>
     </view>
     <view class="bind-info"><text class="bind-hint">微信绑定仅用于识别当前账号。本演示版本不会向服务器上传资料；正式版本需要由后端安全换取会话。</text></view>
+    <view class="error-msg" wx:if="{{bindError}}" role="alert">{{bindError}}</view>
     <view class="wechat-btn {{loading ? 'loading' : ''}}" bindtap="onBindWechat">
       <van-icon name="wechat" size="20px" color="#ffffff" />
       <text>{{loading ? '绑定中...' : '微信一键绑定'}}</text>
