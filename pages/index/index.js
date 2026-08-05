@@ -1,4 +1,6 @@
 // pages/index/index.js
+const auth = require("../../utils/auth")
+
 Page({
   data: {
     isLoggedIn: false,
@@ -25,17 +27,17 @@ Page({
   },
 
   onShow() {
-    const currentUser = wx.getStorageSync("userInfo")
-    if (currentUser && currentUser.role === "counselor") return wx.reLaunch({ url: "/pages/counselor/dashboard" })
-    if (currentUser && currentUser.role === "admin") return wx.reLaunch({ url: "/pages/admin/dashboard" })
+    const currentUser = auth.getCurrentUser()
+    if (currentUser && currentUser.role !== "student") return auth.routeToRoleHome(currentUser)
     if (typeof this.getTabBar === "function" && this.getTabBar()) {
       this.getTabBar().setData({ selected: 0 })
     }
     this.loadUserInfo()
+    this.loadPendingAssessments()
   },
 
   loadUserInfo() {
-    const userInfo = wx.getStorageSync("userInfo")
+    const userInfo = auth.getCurrentUser()
     this.setData({
       isLoggedIn: !!userInfo,
       userInfo: userInfo || null
@@ -76,8 +78,13 @@ Page({
   },
 
   loadPendingAssessments() {
+    const user = auth.getCurrentUser()
+    if (!user || user.role !== "student") {
+      this.setData({ pendingAssessmentCount: 0, pendingTasks: [], recentResult: null })
+      return
+    }
     const tasks = wx.getStorageSync("assessmentTasks") || []
-    const results = wx.getStorageSync("assessmentResults") || []
+    const results = (wx.getStorageSync("assessmentResults") || []).filter(item => item.studentId === user.studentId)
     const pendingTasks = tasks.filter(item => !item.completed && item.status !== "已结束")
     const recentResult = results.length ? results.slice().sort((a, b) => b.id - a.id)[0] : null
     this.setData({ pendingAssessmentCount: pendingTasks.length, pendingTasks, recentResult })

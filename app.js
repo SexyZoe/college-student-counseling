@@ -1,20 +1,17 @@
 // app.js
+const auth = require("./utils/auth")
+
 App({
   onLaunch() {
     this.migrateLocalData()
     this.initLocalDemoData()
-    const userInfo = wx.getStorageSync("userInfo")
-    if (userInfo) {
-      this.globalData.userInfo = userInfo
-      this.globalData.isLoggedIn = true
-      this.globalData.role = userInfo.role || "student"
-    }
+    auth.restoreSession(this)
   },
 
   globalData: {
     userInfo: null,
     isLoggedIn: false,
-    role: "student",
+    role: null,
     selectedTab: 0
   },
 

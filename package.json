@@ -2,6 +2,9 @@
   "name": "shuzhi-heart-harbor",
   "version": "1.0.0",
   "description": "数智心港湾微信小程序",
+  "scripts": {
+    "test": "node tests/auth.test.js && node tests/login-page.test.js"
+  },
   "dependencies": {
     "@vant/weapp": "^1.11.6"
   }

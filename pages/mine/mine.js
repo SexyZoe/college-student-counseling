@@ -1,5 +1,6 @@
 // pages/mine/mine.js
 const util = require("../../utils/util")
+const auth = require("../../utils/auth")
 
 Page({
   data: {
@@ -28,7 +29,11 @@ Page({
   },
 
   checkLoginStatus() {
-    const userInfo = wx.getStorageSync("userInfo")
+    const userInfo = auth.getCurrentUser()
+    if (userInfo && userInfo.role !== "student") {
+      auth.routeToRoleHome(userInfo)
+      return
+    }
     if (userInfo) {
       this.setData({ isLoggedIn: true, userInfo })
     } else {
@@ -108,10 +113,7 @@ Page({
       content: "确定要退出登录吗？",
       success: (res) => {
         if (res.confirm) {
-          wx.removeStorageSync("userInfo")
-          getApp().globalData.userInfo = null
-          getApp().globalData.isLoggedIn = false
-          getApp().globalData.role = "student"
+          auth.clearSession("学生主动退出")
           this.setData({ isLoggedIn: false, userInfo: null })
           wx.showToast({ title: "已退出登录", icon: "none" })
           setTimeout(() => wx.reLaunch({ url: "/pages/login/login" }), 300)
