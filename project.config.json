@@ -7,8 +7,8 @@
       "miniprogramNpmDistDir": "./miniprogram_npm/"
     }
   ],
-  "appid": "wx5afd29d32e4de7ab",
-  "libVersion": "3.15.2",
+  "appid": "wx0217e180366cff2b",
+  "libVersion": "3.14.3",
   "setting": {
     "es6": false,
     "postcss": false,
@@ -36,7 +36,40 @@
   "compileType": "miniprogram",
   "simulatorPluginLibVersion": {},
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      {
+        "type": "folder",
+        "value": ".git"
+      },
+      {
+        "type": "folder",
+        "value": "docs"
+      },
+      {
+        "type": "folder",
+        "value": "tests"
+      },
+      {
+        "type": "file",
+        "value": ".DS_Store"
+      },
+      {
+        "type": "file",
+        "value": ".gitignore"
+      },
+      {
+        "type": "file",
+        "value": "README.md"
+      },
+      {
+        "type": "file",
+        "value": "handoff.md"
+      },
+      {
+        "type": "file",
+        "value": "开发流程汇报.md"
+      }
+    ],
     "include": []
   },
   "editorSetting": {}
