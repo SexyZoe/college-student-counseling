@@ -1,0 +1,147 @@
+/* pages/article/list.wxss */
+
+.article-container {
+  min-height: 100vh;
+  background-color: #faf7f2;
+}
+
+/* 分类标签 */
+.category-section {
+  background-color: #ffffff;
+  padding: 20rpx 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.category-scroll {
+  width: 100%;
+}
+
+.category-list {
+  display: flex;
+  padding: 0 30rpx;
+  white-space: nowrap;
+}
+
+.category-item {
+  padding: 16rpx 30rpx;
+  margin-right: 20rpx;
+  border-radius: 30rpx;
+  background-color: #faf7f2;
+  display: inline-block;
+}
+
+.category-item.active {
+  background-color: #f4a3a8;
+}
+
+.category-text {
+  font-size: 28rpx;
+  color: #8a8a8a;
+}
+
+.category-item.active .category-text {
+  color: #ffffff;
+}
+
+/* 文章列表 */
+.article-list {
+  padding: 30rpx;
+}
+
+.article-card {
+  background-color: #ffffff;
+  border-radius: 20rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.article-cover {
+  width: 100%;
+  height: 300rpx;
+}
+
+.article-content {
+  padding: 20rpx 30rpx 30rpx;
+}
+
+.article-tag {
+  display: inline-block;
+  padding: 8rpx 16rpx;
+  border-radius: 8rpx;
+  font-size: 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.article-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #4a4a4a;
+  margin-bottom: 16rpx;
+  display: block;
+}
+
+.article-summary {
+  font-size: 26rpx;
+  color: #b0b0b0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 16rpx;
+}
+
+.article-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.meta-date {
+  font-size: 24rpx;
+  color: #b0b0b0;
+}
+
+.meta-views {
+  display: flex;
+  align-items: center;
+}
+
+.meta-num {
+  font-size: 24rpx;
+  color: #b0b0b0;
+  margin-left: 8rpx;
+}
+
+/* 空状态 */
+.empty-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100rpx 30rpx;
+}
+
+.empty-icon-box {
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 50%;
+  background-color: #faf7f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 30rpx;
+}
+
+.empty-text {
+  font-size: 32rpx;
+  color: #8a8a8a;
+  margin-bottom: 20rpx;
+}
+
+.empty-tip {
+  font-size: 26rpx;
+  color: #b0b0b0;
+}

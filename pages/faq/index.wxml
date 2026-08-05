@@ -1,0 +1,33 @@
+<view class="faq-container">
+  <!-- 搜索栏 -->
+  <view class="search-bar">
+    <view class="search-box" wx:if="{{showSearch}}">
+      <input class="search-input" placeholder="搜索问题或关键词..." value="{{searchKeyword}}" bindinput="onSearchInput" focus="{{true}}" />
+      <van-icon name="cross" size="16px" color="#999" bindtap="onToggleSearch" />
+    </view>
+    <van-icon wx:else name="search" size="20px" color="#999" bindtap="onToggleSearch" />
+  </view>
+
+  <!-- 分类标签 -->
+  <scroll-view class="category-bar" scroll-x="true">
+    <view class="category-tag {{activeCategory === item ? 'active' : ''}}" wx:for="{{categories}}" wx:key="*this" bindtap="onCategoryTap" data-category="{{item}}">
+      <text>{{item}}</text>
+    </view>
+  </scroll-view>
+
+  <!-- FAQ 列表 -->
+  <view class="faq-list">
+    <view class="faq-item" wx:for="{{filteredList}}" wx:key="id" bindtap="onItemTap" data-id="{{item.id}}">
+      <view class="faq-left">
+        <view class="faq-category-tag">{{item.category}}</view>
+        <text class="faq-question">{{item.question}}</text>
+      </view>
+      <van-icon name="arrow" size="14px" color="#ccc" />
+    </view>
+    <van-empty wx:if="{{filteredList.length === 0}}" description="未找到相关问题" />
+  </view>
+
+  <view class="faq-footer">
+    <text>以上内容仅供参考，不能替代专业心理咨询</text>
+  </view>
+</view>

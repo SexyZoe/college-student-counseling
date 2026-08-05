@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "心理资讯",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "van-icon": "@vant/weapp/icon/index"
+  }
+}

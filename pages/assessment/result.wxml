@@ -1,0 +1,70 @@
+<view class="result-container">
+  <!-- 头部：分数+等级 -->
+  <view class="result-header" style="background: linear-gradient(135deg, {{levelColor}}30, {{levelColor}}10);">
+    <view class="score-circle" style="border-color: {{levelColor}};">
+      <text class="score-number">{{score}}</text>
+      <text class="score-total">/ {{total}}</text>
+      <text class="std-score">T分: {{stdScore}}</text>
+    </view>
+    <text class="result-level" style="color: {{levelColor}};">{{level}}</text>
+    <text class="result-desc">{{levelDesc}}</text>
+  </view>
+
+  <!-- 免责声明 -->
+  <view class="disclaimer-bar">
+    <van-icon name="info-o" size="14px" color="#999" />
+    <text>本结果仅用于心理健康教育和风险筛查参考，不构成医疗诊断。</text>
+  </view>
+
+  <!-- 五维雷达图 -->
+  <view class="result-section" wx:if="{{dimensions.length >= 3}}">
+    <text class="section-title">五维雷达图</text>
+    <canvas type="2d" id="radarCanvas" class="radar-canvas"></canvas>
+  </view>
+
+  <!-- 测评分析 -->
+  <view class="result-section">
+    <text class="section-title">测评分析</text>
+    <text class="analysis-text">{{analysis}}</text>
+  </view>
+
+  <view class="support-card" bindtap="goHelp">
+    <view><text class="support-title">需要进一步支持？</text><text class="support-text">查看校心理中心、辅导员和紧急求助渠道</text></view>
+    <van-icon name="arrow" size="16px" color="#999" />
+  </view>
+
+  <!-- 建议方案 -->
+  <view class="result-section">
+    <text class="section-title">个性化建议</text>
+    <view class="suggestion-list">
+      <view class="suggestion-item" wx:for="{{suggestions}}" wx:key="*this">
+        <view class="suggestion-dot" style="background-color: {{levelColor}};"></view>
+        <text class="suggestion-text">{{item}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 历史趋势入口 -->
+  <view class="result-section">
+    <view class="history-entry" bindtap="viewHistory">
+      <view class="history-left">
+        <van-icon name="chart-trending-o" size="20px" color="#f4a3a8" />
+        <text>查看历史趋势</text>
+        <text class="history-count" wx:if="{{historyCount > 1}}">(共{{historyCount}}次)</text>
+      </view>
+      <van-icon name="arrow" size="14px" color="#999" />
+    </view>
+  </view>
+
+  <!-- 底部按钮 -->
+  <view class="result-actions">
+    <view class="action-btn btn-secondary" bindtap="viewHistory">
+      <text>历史趋势</text>
+    </view>
+    <view class="action-btn btn-primary" bindtap="goBack">
+      <text>返回测评</text>
+    </view>
+  </view>
+
+  <view class="bottom-safe"></view>
+</view>

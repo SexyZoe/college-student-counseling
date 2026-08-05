@@ -1,0 +1,8 @@
+{
+  "name": "shuzhi-heart-harbor",
+  "version": "1.0.0",
+  "description": "数智心港湾微信小程序",
+  "dependencies": {
+    "@vant/weapp": "^1.11.6"
+  }
+}

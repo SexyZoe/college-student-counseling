@@ -1,0 +1,23 @@
+<view class="history-page">
+  <view class="history-header">
+    <text class="history-title">{{assessmentName}}</text>
+    <view class="trend-badge" style="color: {{trendColor}};">
+      <text>{{trendDirection}}</text>
+    </view>
+  </view>
+
+  <van-empty wx:if="{{historyList.length === 0}}" description="暂无测评记录" />
+
+  <view class="history-list" wx:if="{{historyList.length > 0}}">
+    <view class="history-item" wx:for="{{historyList}}" wx:key="id" bindtap="onTapItem" data-id="{{item.id}}">
+      <view class="history-left">
+        <text class="history-date">{{item.date}}</text>
+        <text class="history-score">得分: {{item.score}}</text>
+      </view>
+      <view class="history-right">
+        <text class="history-level" style="color: {{item.levelColor || '#8fc8b5'}};">{{item.level}}</text>
+        <van-icon name="arrow" size="14px" color="#999" />
+      </view>
+    </view>
+  </view>
+</view>

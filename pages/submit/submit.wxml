@@ -1,0 +1,17 @@
+<view class="submit-container">
+  <view class="form-card">
+    <view class="form-label">文章标题</view>
+    <van-field value="{{title}}" placeholder="请输入文章标题" bind:change="onTitleInput" />
+  </view>
+  <view class="form-card">
+    <view class="form-label">文章分类</view>
+    <picker mode="selector" range="{{categories}}" bindchange="onCategoryChange">
+      <view class="picker-display">{{category}} <van-icon name="arrow-down" size="14px" color="#999" /></view>
+    </picker>
+  </view>
+  <view class="form-card">
+    <view class="form-label">文章内容</view>
+    <van-field value="{{content}}" placeholder="请输入文章正文..." type="textarea" autosize maxlength="2000" show-word-limit bind:change="onContentInput" />
+  </view>
+  <view class="submit-btn btn-primary" bindtap="onSubmit"><text class="btn-text">提交投稿</text></view>
+</view>

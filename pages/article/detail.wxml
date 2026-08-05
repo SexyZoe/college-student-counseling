@@ -1,0 +1,54 @@
+<!-- pages/article/detail/detail.wxml -->
+<view class="detail-container">
+  <view class="article-header">
+    <image class="article-cover" src="{{article.cover}}" mode="aspectFill"/>
+    <view class="header-content">
+      <text class="article-title">{{article.title}}</text>
+      <view class="article-info">
+        <view class="info-row">
+          <van-icon name="user-o" size="14px" color="#888"/>
+          <text class="info-text">{{article.author || '心理中心'}}</text>
+          <van-icon name="clock-o" size="14px" color="#888"/>
+          <text class="info-text">{{article.createTime}}</text>
+          <van-icon name="eye-o" size="14px" color="#888"/>
+          <text class="info-text">{{article.views}}人看过</text>
+        </view>
+        <view class="info-tag" style="background-color: {{article.tagColor}}20; color: {{article.tagColor}};">
+          {{article.category}}
+        </view>
+        <view class="info-row"><text class="info-text">专业审核：{{article.reviewer || '待补充'}}</text><text class="info-text">更新：{{article.updateTime || article.createTime}}</text></view>
+      </view>
+    </view>
+  </view>
+
+  <view class="article-body">
+    <block wx:for="{{contentParagraphs}}" wx:key="index">
+      <text class="article-paragraph">{{item}}</text>
+    </block>
+  </view>
+
+  <van-divider content="— 感谢阅读 —"/>
+
+  <view class="action-bar">
+    <view class="action-item" bindtap="onLike">
+      <van-icon name="{{isLiked ? 'good-job' : 'good-job-o'}}" size="22px" color="{{isLiked ? '#FFAAA5' : '#888'}}"/>
+      <text class="action-text" style="color: {{isLiked ? '#FFAAA5' : '#888'}};">{{isLiked ? '已赞' : '点赞'}}</text>
+    </view>
+    <view class="action-item {{isFavorite ? 'active' : ''}}" bindtap="onFavorite">
+      <van-icon name="{{isFavorite ? 'star' : 'star-o'}}" size="22px" color="{{isFavorite ? '#FFD700' : '#888'}}"/>
+      <text class="action-text" style="color: {{isFavorite ? '#FFD700' : '#888'}};">{{isFavorite ? '已收藏' : '收藏'}}</text>
+    </view>
+    <button class="action-item share-item" open-type="share">
+      <van-icon name="share-o" size="22px" color="#888"/>
+      <text class="action-text">分享</text>
+    </button>
+  </view>
+
+  <view class="submit-entry" bindtap="goSubmit">
+    <view class="submit-icon-wrap">
+      <van-icon name="add-o" size="20px" color="#f4a3a8"/>
+    </view>
+    <text class="submit-entry-text">我有心理故事想分享</text>
+    <van-icon name="arrow" size="14px" color="#ccc"/>
+  </view>
+</view>

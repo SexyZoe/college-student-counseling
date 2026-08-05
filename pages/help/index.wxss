@@ -1,0 +1,13 @@
+.help-page { min-height:100vh; padding:30rpx 30rpx 60rpx; background:#faf7f2; }
+.urgent-card { padding:32rpx; border:2rpx solid #f4a3a8; background:#fef0f2; border-radius:22rpx; }
+.urgent-title { display:block; font-size:31rpx; font-weight:700; color:#b94d58; margin-bottom:12rpx; }
+.urgent-text { display:block; font-size:26rpx; color:#704d50; line-height:1.8; }
+.section-title { margin:34rpx 0 18rpx; font-size:32rpx; font-weight:700; }
+.resource-card { display:flex; align-items:center; padding:28rpx; margin-bottom:18rpx; background:#fff; border-radius:20rpx; }
+.resource-main { flex:1; display:flex; flex-direction:column; }
+.resource-name { font-size:29rpx; font-weight:700; color:#333; }
+.resource-note,.resource-time { font-size:23rpx; color:#888; margin-top:6rpx; }
+.call-btn { padding:14rpx 24rpx; color:#fff; background:#8fc8b5; border-radius:30rpx; font-size:24rpx; }
+.tip-card { padding:28rpx; margin-top:26rpx; color:#666; line-height:1.8; font-size:25rpx; background:#e8f3fa; border-radius:20rpx; }
+.tip-title { display:block; color:#3f7395; font-size:28rpx; font-weight:700; margin-bottom:10rpx; }
+.demo-note { padding:28rpx 10rpx; color:#aaa; font-size:22rpx; text-align:center; }

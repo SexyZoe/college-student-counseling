@@ -1,0 +1,16 @@
+.faq-container { min-height: 100vh; background: #faf7f2; }
+.search-bar { padding: 16rpx 30rpx; display: flex; justify-content: flex-end; background: #fff; }
+.search-box { display: flex; align-items: center; flex: 1; background: #f5f5f5; border-radius: 30rpx; padding: 6rpx 20rpx; }
+.search-input { flex: 1; height: 60rpx; font-size: 26rpx; }
+
+.category-bar { white-space: nowrap; padding: 20rpx 30rpx; background: #fff; border-bottom: 1rpx solid #f0f0f0; }
+.category-tag { display: inline-block; padding: 10rpx 24rpx; margin-right: 16rpx; border-radius: 30rpx; font-size: 24rpx; color: #666; background: #f5f5f5; }
+.category-tag.active { background: linear-gradient(135deg, #f4a3a8, #8fc8b5); color: #fff; }
+
+.faq-list { padding: 20rpx 30rpx; }
+.faq-item { display: flex; align-items: center; padding: 28rpx 0; border-bottom: 1rpx solid #f0f0f0; }
+.faq-left { flex: 1; }
+.faq-category-tag { font-size: 20rpx; color: #8fc8b5; margin-bottom: 8rpx; }
+.faq-question { font-size: 28rpx; color: #333; line-height: 1.5; }
+
+.faq-footer { text-align: center; padding: 40rpx; font-size: 22rpx; color: #ccc; }

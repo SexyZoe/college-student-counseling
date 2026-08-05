@@ -1,0 +1,62 @@
+<view class="login-container">
+  <view class="login-card" wx:if="{{step === 'login'}}">
+    <view class="logo-section">
+      <image class="logo-image" src="/images/logo.png" mode="aspectFill" />
+      <text class="logo-title">数智心港湾</text>
+      <text class="logo-subtitle">大学生心理健康支持平台</text>
+    </view>
+
+    <view class="role-tabs">
+      <view wx:for="{{roleOptions}}" wx:key="value" class="role-tab {{role === item.value ? 'active' : ''}}" data-role="{{item.value}}" bindtap="onRoleTap">{{item.label}}</view>
+    </view>
+
+    <view class="input-group">
+      <view class="input-label">{{accountLabel}}</view>
+      <view class="input-wrapper">
+        <van-icon name="user-o" size="18px" color="#999" />
+        <input class="login-input" type="text" placeholder="请输入{{accountLabel}}" value="{{accountId}}" bindinput="onAccountInput" maxlength="20" />
+      </view>
+    </view>
+    <view class="input-group">
+      <view class="input-label">独立密码</view>
+      <view class="input-wrapper">
+        <van-icon name="lock" size="18px" color="#999" />
+        <input class="login-input" type="password" placeholder="请输入本系统独立密码" value="{{password}}" bindinput="onPasswordInput" maxlength="20" />
+      </view>
+    </view>
+
+    <view class="error-msg" wx:if="{{loginError}}">{{loginError}}</view>
+    <view class="login-btn {{loading ? 'loading' : ''}}" bindtap="onLogin">{{loading ? '验证中...' : '登录'}}</view>
+
+    <view class="agreement-section">
+      <van-checkbox value="{{agreed}}" bind:change="onAgreementChange" shape="square" icon-size="14px" />
+      <text class="agreement-text">我已阅读并同意</text>
+      <text class="agreement-link" bindtap="viewAgreement">《隐私政策与敏感信息说明》</text>
+    </view>
+
+    <view class="demo-accounts">
+      <text class="demo-title">本地演示账号（密码均为 123456）</text>
+      <text>学生：2024001　辅导员：T001　管理员：admin</text>
+    </view>
+  </view>
+
+  <view class="login-card" wx:if="{{step === 'bind'}}">
+    <view class="logo-section">
+      <image class="logo-image" src="/images/logo.png" mode="aspectFill" />
+      <text class="logo-title">绑定微信身份</text>
+      <text class="logo-subtitle">校内身份验证成功</text>
+    </view>
+    <view class="bind-info"><text class="bind-hint">微信绑定仅用于识别当前账号。本演示版本不会向服务器上传资料；正式版本需要由后端安全换取会话。</text></view>
+    <view class="wechat-btn {{loading ? 'loading' : ''}}" bindtap="onBindWechat">
+      <van-icon name="wechat" size="20px" color="#ffffff" />
+      <text>{{loading ? '绑定中...' : '微信一键绑定'}}</text>
+    </view>
+    <view class="skip-section" bindtap="onSkipBind"><text class="skip-text">暂不绑定，进入演示</text></view>
+    <view class="back-section" bindtap="goBack"><van-icon name="arrow-left" size="14px" color="#999" /><text class="back-text-small">返回重新登录</text></view>
+  </view>
+
+  <view class="login-card" wx:if="{{step === 'done'}}">
+    <view class="done-icon">✓</view>
+    <text class="done-text">登录成功，正在进入对应工作台…</text>
+  </view>
+</view>

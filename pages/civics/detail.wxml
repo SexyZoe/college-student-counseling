@@ -1,0 +1,6 @@
+<view class="detail-page" wx:if="{{article.id}}">
+  <view class="detail-head"><view class="detail-tag">{{article.category}}</view><text class="detail-title">{{article.title}}</text><text class="detail-summary">{{article.summary}}</text><view class="detail-meta"><text>发布：{{article.author}}</text><text>审核：{{article.reviewer}}</text><text>{{article.publishTime}}</text></view></view>
+  <view class="detail-content"><text user-select>{{article.content}}</text></view>
+  <view class="detail-note">欢迎理性交流。内容关注价值教育与社会责任，不用于判断学生心理健康状况。</view>
+  <button class="share-btn" open-type="share">分享内容</button>
+</view>

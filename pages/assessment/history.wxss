@@ -1,0 +1,17 @@
+.history-page { min-height: 100vh; background: #faf7f2; }
+.history-header {
+  padding: 30rpx; display: flex; justify-content: space-between; align-items: center;
+  background: #fff; margin-bottom: 16rpx;
+}
+.history-title { font-size: 34rpx; font-weight: bold; color: #333; }
+.trend-badge { font-size: 26rpx; font-weight: 500; }
+.history-list { padding: 0 30rpx; }
+.history-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 28rpx; background: #fff; border-radius: 16rpx; margin-bottom: 16rpx;
+}
+.history-left { display: flex; flex-direction: column; gap: 8rpx; }
+.history-date { font-size: 26rpx; color: #666; }
+.history-score { font-size: 28rpx; color: #333; font-weight: 500; }
+.history-right { display: flex; align-items: center; gap: 8rpx; }
+.history-level { font-size: 26rpx; font-weight: 500; }

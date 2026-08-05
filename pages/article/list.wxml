@@ -1,0 +1,55 @@
+<!-- pages/article/list.wxml -->
+<view class="article-container">
+  <!-- 分类标签 -->
+  <view class="category-section">
+    <scroll-view class="category-scroll" scroll-x show-scrollbar="{{false}}">
+      <view class="category-list">
+        <view
+          class="category-item {{currentCategory === item ? 'active' : ''}}"
+          wx:for="{{categories}}"
+          wx:key="*this"
+          bindtap="onCategoryChange"
+          data-category="{{item}}"
+        >
+          <text class="category-text">{{item}}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <!-- 文章列表 -->
+  <view class="article-list" wx:if="{{filteredList.length > 0}}">
+    <view
+      class="article-card"
+      wx:for="{{filteredList}}"
+      wx:key="id"
+      bindtap="onArticleTap"
+      data-id="{{item.id}}"
+    >
+      <image class="article-cover" src="{{item.cover}}" mode="aspectFill" />
+      <view class="article-content">
+        <view class="article-tag" style="background-color: rgba(91, 155, 213, 0.1); color: #f4a3a8;">
+          {{item.category}}
+        </view>
+        <text class="article-title">{{item.title}}</text>
+        <text class="article-summary">{{item.summary}}</text>
+        <view class="article-meta">
+          <text class="meta-date">{{item.author}} · {{item.createTime}}</text>
+          <view class="meta-views">
+            <van-icon name="eye-o" size="12px" color="#999" />
+            <text class="meta-num">{{item.views}}人阅读</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 空状态 -->
+  <view class="empty-section" wx:else>
+    <view class="empty-icon-box">
+      <van-icon name="newspaper-o" size="40px" color="#999" />
+    </view>
+    <text class="empty-text">暂无{{currentCategory}}类文章</text>
+    <text class="empty-tip">敬请期待更多精彩内容</text>
+  </view>
+</view>

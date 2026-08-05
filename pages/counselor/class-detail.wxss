@@ -1,0 +1,2 @@
+@import "./common.wxss";
+.distribution-row { display:flex; justify-content:space-between; margin-top:24rpx; }.distribution-item { flex:1; display:flex; flex-direction:column; align-items:center; }.distribution-value { font-size:38rpx; font-weight:800; }.distribution-label { color:#888; font-size:21rpx; margin-top:5rpx; }.dimension-row { margin-top:18rpx; }.chart-note { display:block; margin-top:22rpx; color:#aaa; font-size:21rpx; line-height:1.6; }
