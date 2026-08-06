@@ -120,3 +120,37 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   details_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS import_batches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_batch_id TEXT NOT NULL UNIQUE,
+  file_name TEXT NOT NULL,
+  file_hash TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('待确认', '校验失败', '已导入', '已回滚')),
+  total_rows INTEGER NOT NULL DEFAULT 0,
+  create_count INTEGER NOT NULL DEFAULT 0,
+  update_count INTEGER NOT NULL DEFAULT 0,
+  unchanged_count INTEGER NOT NULL DEFAULT 0,
+  error_count INTEGER NOT NULL DEFAULT 0,
+  plan_json TEXT NOT NULL DEFAULT '{}',
+  errors_json TEXT NOT NULL DEFAULT '[]',
+  created_by_user_id TEXT NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  applied_at TEXT,
+  rolled_back_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS import_batches_created_at
+ON import_batches(created_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS import_batch_changes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id INTEGER NOT NULL REFERENCES import_batches(id),
+  sequence_no INTEGER NOT NULL,
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('class', 'user', 'assignment')),
+  entity_key TEXT NOT NULL,
+  operation TEXT NOT NULL CHECK (operation IN ('create', 'update')),
+  before_json TEXT,
+  after_json TEXT NOT NULL,
+  UNIQUE (batch_id, sequence_no)
+);

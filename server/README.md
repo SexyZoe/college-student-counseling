@@ -55,6 +55,18 @@ wx.setStorageSync("backendSyncEnabled", false)
 | GET/POST | `/api/v1/admin/semesters` | 管理员 | 查询、创建学期 |
 | PATCH | `/api/v1/admin/semesters/:id/current` | 管理员 | 切换当前学期 |
 | POST | `/api/v1/admin/counselor-assignments` | 管理员 | 按学期分配辅导员班级权限 |
+| GET | `/api/v1/admin/students` | 管理员 | 查询学生和班级基础信息 |
+| GET | `/api/v1/admin/counselor-assignments` | 管理员 | 查询辅导员分配关系 |
+| GET | `/api/v1/admin/import-batches` | 管理员 | 查询最近导入批次 |
+| POST | `/api/v1/admin/import-batches/preview` | 管理员 | 解析 CSV 并生成差异预览，不写正式数据 |
+| POST | `/api/v1/admin/import-batches/:id/confirm` | 管理员 | 单事务确认导入 |
+| POST | `/api/v1/admin/import-batches/:id/rollback` | 管理员 | 根据变更快照整批回滚 |
+
+## 人员 CSV 导入
+
+管理员页面支持班级、学生、辅导员和分配关系的 CSV 预检、确认与整批回滚。当前稳定格式为 CSV，Excel 文件请先另存为 UTF-8 CSV；详细字段、模板和安全边界参见 [人员数据导入与回滚说明](../docs/人员数据导入与回滚说明.md)。
+
+预检计划只保存密码摘要，不保存或返回明文初始密码。确认前若正式数据发生变化会拒绝写入；导入后数据再次变化时也会拒绝自动覆盖回滚。
 
 ## 安全边界
 
@@ -64,6 +76,7 @@ wx.setStorageSync("backendSyncEnabled", false)
 - 辅导员查询必须同时匹配辅导员、班级和学期分配关系。
 - 辅导员接口只返回必要结果摘要，不返回 `answer_snapshot_json`。
 - 管理员切换学期不会修改历史任务、结果或风险事件的学期归属。
+- 人员导入采用预检、单事务确认和变更快照回滚；新增实体回滚时停用而非物理删除。
 
 ## 上线前仍需完成
 

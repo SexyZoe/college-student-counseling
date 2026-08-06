@@ -2,6 +2,7 @@ const crypto = require("node:crypto")
 const { HttpError } = require("./errors")
 const { inTransaction } = require("./database")
 const { normalizeAccountId, verifyPassword, issueToken, verifyToken } = require("./security")
+const { createPersonnelImportServices } = require("./personnel-import-service")
 const scoringEngine = require("../../utils/scoring-engine")
 
 const ROLES = ["student", "counselor", "admin"]
@@ -462,6 +463,12 @@ function createServices(database, config, options) {
     return { staffId: counselor.staff_no, classId: classRow.id, semesterId: semester.id, active: true }
   }
 
+  const personnelImports = createPersonnelImportServices(database, {
+    nowIso:nowIso,
+    audit:audit,
+    requireRole:requireRole
+  })
+
   return {
     login,
     authenticate,
@@ -477,7 +484,14 @@ function createServices(database, config, options) {
     listSemesters,
     createSemester,
     setCurrentSemester,
-    createCounselorAssignment
+    createCounselorAssignment,
+    previewPersonnelImport:personnelImports.previewPersonnelImport,
+    listImportBatches:personnelImports.listImportBatches,
+    getImportBatch:personnelImports.getImportBatch,
+    confirmImportBatch:personnelImports.confirmImportBatch,
+    rollbackImportBatch:personnelImports.rollbackImportBatch,
+    listAdminStudents:personnelImports.listAdminStudents,
+    listAdminAssignments:personnelImports.listAdminAssignments
   }
 }
 

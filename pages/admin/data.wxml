@@ -1,5 +1,78 @@
-<view class="workspace"><view class="workspace-head admin-head"><text class="head-title">学期与组织数据</text><text class="head-sub">历史关系新增留存，不覆盖既往测评归属</text></view><view class="filter-row"><view wx:for="{{tabs}}" wx:key="*this" class="filter-item {{activeTab === item ? 'active' : ''}}" data-tab="{{item}}" bindtap="onTab">{{item}}</view></view>
-<view wx:if="{{activeTab === '学期'}}"><view class="notice" wx:if="{{currentSemester}}">当前学期：{{currentSemester.name}}。切换学期不会覆盖历史任务、答题结果或评分版本。</view><view class="form-card"><text class="form-label">新学期名称</text><input class="form-input" value="{{semesterName}}" bindinput="onSemesterName" placeholder="例如：2027-2028学年第一学期"/><text class="form-label">开始日期</text><input class="form-input" value="{{startDate}}" bindinput="onStart" placeholder="YYYY-MM-DD"/><text class="form-label">结束日期</text><input class="form-input" value="{{endDate}}" bindinput="onEnd" placeholder="YYYY-MM-DD"/><view class="primary-btn admin-btn" style="margin:28rpx 0 0;" bindtap="createSemester">创建学期</view></view><view class="section"><view class="panel" wx:for="{{semesters}}" wx:key="id"><view class="head-row"><view class="card-main"><text class="card-title">{{item.name}}</text><view class="card-meta"><text>{{item.startDate}} 至 {{item.endDate}}</text><text>{{item.status}}</text></view></view><view class="status-action" wx:if="{{item.status !== '当前学期'}}" data-id="{{item.id}}" bindtap="setCurrent">设为当前</view></view></view></view></view>
-<view wx:if="{{activeTab === '学生'}}" class="section"><view class="list-card" wx:for="{{students}}" wx:key="studentId"><view class="card-main"><text class="card-title">{{item.studentName}}　{{item.studentId}}</text><view class="card-meta"><text>{{item.className}}</text><text>{{item.major}}</text></view></view></view></view>
-<view wx:if="{{activeTab === '分配'}}" class="section"><view class="panel"><text class="card-title">王辅导员（T001）</text><view class="card-meta"><text>计科2401</text><text>人工智能2401</text><text>当前学期</text></view></view><view class="notice" style="margin:0;">正式系统应支持按学期新增辅导员—班级关系，并在关系变化后及时撤销旧数据权限。</view></view>
-<view wx:if="{{activeTab === '导入'}}"><view class="notice">支持 CSV/XLSX 模板。当前小程序只完成文件选择和批次记录；字段校验、差异预览、确认写入及回滚必须由后端完成。</view><view class="primary-btn admin-btn" bindtap="chooseImport">选择 CSV / Excel 文件</view><view class="section"><view class="panel" wx:for="{{importJobs}}" wx:key="id"><text class="card-title">{{item.fileName}}</text><view class="card-meta"><text>{{item.status}}</text><text>{{item.createdAt}}</text></view></view></view></view></view>
+<view class="workspace">
+  <view class="workspace-head admin-head">
+    <text class="head-title">学期与组织数据</text>
+    <text class="head-sub">历史关系新增留存，不覆盖既往测评归属</text>
+  </view>
+  <view class="filter-row">
+    <view wx:for="{{tabs}}" wx:key="*this" class="filter-item {{activeTab === item ? 'active' : ''}}" data-tab="{{item}}" bindtap="onTab">{{item}}</view>
+  </view>
+
+  <view class="backend-state {{backendReady ? 'online' : ''}}">
+    {{backendReady ? '后端数据模式已启用' : (backendEnabled ? '后端已启用，请重新登录管理员账号' : '当前为本地演示模式；人员导入需启用后端')}}
+  </view>
+
+  <view wx:if="{{activeTab === '学期'}}">
+    <view class="notice" wx:if="{{currentSemester}}">当前学期：{{currentSemester.name}}。切换学期不会覆盖历史任务、答题结果或评分版本。</view>
+    <view class="form-card">
+      <text class="form-label">新学期名称</text>
+      <input class="form-input" value="{{semesterName}}" bindinput="onSemesterName" placeholder="例如：2027-2028学年第一学期"/>
+      <text class="form-label">开始日期</text>
+      <input class="form-input" value="{{startDate}}" bindinput="onStart" placeholder="YYYY-MM-DD"/>
+      <text class="form-label">结束日期</text>
+      <input class="form-input" value="{{endDate}}" bindinput="onEnd" placeholder="YYYY-MM-DD"/>
+      <view class="primary-btn admin-btn" style="margin:28rpx 0 0;" bindtap="createSemester">创建学期</view>
+    </view>
+    <view class="section">
+      <view class="panel" wx:for="{{semesters}}" wx:key="id">
+        <view class="head-row"><view class="card-main"><text class="card-title">{{item.name}}</text><view class="card-meta"><text>{{item.startDate}} 至 {{item.endDate}}</text><text>{{item.status}}</text></view></view><view class="status-action" wx:if="{{item.status !== '当前学期'}}" data-id="{{item.id}}" bindtap="setCurrent">设为当前</view></view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{activeTab === '学生'}}" class="section">
+    <view class="notice">共 {{students.length}} 名学生；停用账号保留历史测评归属，但不能继续登录。</view>
+    <view class="list-card" wx:for="{{students}}" wx:key="studentId">
+      <view class="card-main"><text class="card-title">{{item.studentName}}　{{item.studentId}}</text><view class="card-meta"><text>{{item.className || item.classId}}</text><text>{{item.major}}</text><text>{{item.active === false ? '已停用' : '正常'}}</text></view></view>
+    </view>
+  </view>
+
+  <view wx:if="{{activeTab === '分配'}}" class="section">
+    <view class="panel" wx:for="{{assignments}}" wx:key="key">
+      <text class="card-title">{{item.counselorName}}（{{item.staffId}}）</text>
+      <view class="card-meta"><text>{{item.className}}（{{item.classId}}）</text><text>{{item.semesterName}}</text><text>{{item.active ? '有效' : '已撤销'}}</text></view>
+    </view>
+    <view class="notice" wx:if="{{!assignments.length}}">当前演示数据未从后端读取到辅导员分配记录。</view>
+  </view>
+
+  <view wx:if="{{activeTab === '导入'}}">
+    <view class="notice">稳定格式为 CSV，单批最多 500 行、512KB。流程为预检差异 → 管理员确认 → 单事务写入 → 可审计整批回滚。</view>
+    <view class="import-actions">
+      <view class="secondary-btn" bindtap="copyTemplate">复制 CSV 模板</view>
+      <view class="primary-btn admin-btn" bindtap="chooseImport">选择 CSV 文件</view>
+    </view>
+
+    <view class="panel batch-detail" wx:if="{{selectedBatch}}">
+      <view class="head-row"><view class="card-main"><text class="card-title">批次详情 · {{selectedBatch.fileName}}</text><view class="card-meta"><text>{{selectedBatch.status}}</text><text>共 {{selectedBatch.totalRows}} 行</text></view></view><view class="danger-link" bindtap="closeBatch">关闭</view></view>
+      <view class="batch-stats"><text>新增 {{selectedBatch.createCount}}</text><text>更新 {{selectedBatch.updateCount}}</text><text>无变化 {{selectedBatch.unchangedCount}}</text><text class="error-text">错误 {{selectedBatch.errorCount}}</text></view>
+      <view class="error-row" wx:for="{{selectedBatch.errors}}" wx:key="*this"><text>第 {{item.rowNumber}} 行 · {{item.field}}</text><text>{{item.message}}</text></view>
+      <view class="preview-row" wx:for="{{selectedBatch.items}}" wx:key="*this"><text>{{item.operation}} · {{item.summary}}</text><text class="muted">第 {{item.rowNumber}} 行</text></view>
+      <view class="batch-buttons">
+        <view class="status-action" wx:if="{{selectedBatch.canConfirm}}" data-id="{{selectedBatch.id}}" bindtap="confirmImport">确认导入</view>
+        <view class="danger-action" wx:if="{{selectedBatch.canRollback}}" data-id="{{selectedBatch.id}}" bindtap="rollbackImport">整批回滚</view>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="panel" wx:for="{{importJobs}}" wx:key="id">
+        <view class="head-row"><view class="card-main" data-id="{{item.id}}" bindtap="showBatch"><text class="card-title">{{item.fileName}}</text><view class="card-meta"><text>{{item.status}}</text><text>{{item.totalRows}} 行</text><text>{{item.createdAt}}</text></view></view><view class="status-action" data-id="{{item.id}}" bindtap="showBatch">详情</view></view>
+        <view class="batch-stats"><text>新增 {{item.createCount}}</text><text>更新 {{item.updateCount}}</text><text>错误 {{item.errorCount}}</text></view>
+        <view class="batch-buttons">
+          <view class="status-action" wx:if="{{item.canConfirm}}" data-id="{{item.id}}" bindtap="confirmImport">确认导入</view>
+          <view class="danger-action" wx:if="{{item.canRollback}}" data-id="{{item.id}}" bindtap="rollbackImport">整批回滚</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="loading-mask" wx:if="{{loading}}"><text>正在处理，请稍候…</text></view>
+</view>
