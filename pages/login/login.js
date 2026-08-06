@@ -1,4 +1,6 @@
 const auth = require("../../utils/auth")
+const apiClient = require("../../utils/api-client")
+const resultSync = require("../../utils/result-sync")
 
 function eventValue(event) {
   if (!event || !event.detail) return ""
@@ -125,7 +127,15 @@ Page({
 
   finishLogin(account) {
     try {
+      const backendCredentials = { role: account.role, accountId: account.accountId, password: this.data.password }
       auth.createSession(account, { consentAt: new Date().toISOString() })
+      if (apiClient.getSettings().enabled) {
+        apiClient.login(backendCredentials).then(function() {
+          return resultSync.flushPendingResults()
+        }).catch(function(error) {
+          wx.setStorageSync("backendLastError", { code: error.code || "LOGIN_FAILED", message: error.message, time: Date.now() })
+        })
+      }
       this.setData({ loading: false, step: "done", password: "", verifiedAccount: null })
       wx.showToast({ title: "登录成功", icon: "success" })
       auth.routeToRoleHome(account, { delay: 500 })
