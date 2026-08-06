@@ -19,21 +19,33 @@ Page({
     level: "", levelColor: "", levelDesc: "",
     analysis: "", suggestions: [], assessmentName: "",
     assessmentId: 0,
+    riskLevel: "正常",
+    triggeredRules: [],
     dimensions: [],
     historyCount: 0
   },
 
   onLoad: function(options) {
     if (!auth.requireRole('student')) return;
-    var id = parseInt(options.id) || 1;
+    var currentResults = wx.getStorageSync("assessmentResults") || [];
+    var resultId = options.resultId || "";
+    var storedResult = currentResults.find(function(item) { return String(item.id) === String(resultId); });
+    var id = storedResult ? parseInt(storedResult.assessmentId) : (parseInt(options.id) || 1);
     if (id === 9) {
       this.handleMbtiResult(options);
       return;
     }
-    var score = parseInt(options.score) || 20;
-    var total = parseInt(options.total) || 20;
-    var percentage = Math.round((score / (total * 4)) * 100);
-    var stdScore = percentage;
+    var score = storedResult ? Number(storedResult.score) : (parseInt(options.score) || 20);
+    var questionCount = storedResult && storedResult.questionnaireSnapshot
+      ? storedResult.questionnaireSnapshot.questionCount
+      : (parseInt(options.total) || 20);
+    var maxScore = storedResult
+      ? (storedResult.scoringSnapshot ? Number(storedResult.total) : Number(storedResult.total) * 4)
+      : questionCount * 4;
+    var percentage = storedResult && storedResult.normalizedRiskScore !== undefined
+      ? storedResult.normalizedRiskScore
+      : Math.round((score / maxScore) * 100);
+    var stdScore = storedResult && storedResult.stdScore !== undefined ? storedResult.stdScore : percentage;
     var key = scaleKeys[id] || "sas";
     var resultData = resultsData[key];
     var level = "", levelColor = "", levelDesc = "";
@@ -48,26 +60,29 @@ Page({
     var suggestions = resultData.suggestions[level] || [];
 
     // 生成五维得分（基于总分和测评类型模拟各维度分数）
-    var dimensions = this.generateDimensions(id, score, total);
+    var dimensions = storedResult && storedResult.dimensions && storedResult.dimensions.length
+      ? storedResult.dimensions
+      : this.generateDimensions(id, score, maxScore);
 
-    // 仅在新提交时保存结果；查看历史记录时不重复写入
-    var currentResults = wx.getStorageSync("assessmentResults") || [];
-    if (options.readonly !== "1") {
+    // 兼容旧链接；新版答题页会在跳转前创建包含版本快照的结果。
+    if (!storedResult && options.readonly !== "1") {
       var user = wx.getStorageSync("userInfo") || {};
       currentResults.push({
         id: Date.now(), studentId: user.studentId || "demo-student", taskId: parseInt(options.taskId) || 0,
         assessmentId: id, assessmentName: resultData.name,
-        score: score, total: total, stdScore: stdScore, level: level, riskLevel: this.mapRiskLevel(level), dimensions: dimensions,
+        score: score, total: maxScore, stdScore: stdScore, level: level, riskLevel: this.mapRiskLevel(level), dimensions: dimensions,
         date: new Date().toISOString().slice(0, 10)
       });
       wx.setStorageSync("assessmentResults", currentResults);
     }
 
     this.setData({
-      score: score, total: total, percentage: percentage, stdScore: stdScore,
+      score: score, total: maxScore, percentage: percentage, stdScore: stdScore,
       level: level, levelColor: levelColor, levelDesc: levelDesc,
       analysis: analysis, suggestions: suggestions,
       assessmentName: resultData.name, assessmentId: id,
+      riskLevel: storedResult ? storedResult.riskLevel : this.mapRiskLevel(level),
+      triggeredRules: storedResult ? (storedResult.triggeredRules || []) : [],
       dimensions: dimensions,
       historyCount: currentResults.filter(function(r) { return r.assessmentId === id; }).length
     });
@@ -79,7 +94,7 @@ Page({
 
   /* 根据测评类型模拟生成五维得分 */
   generateDimensions: function(assessmentId, totalScore, maxScore) {
-    var basePercent = (totalScore / (maxScore * 4) * 100);
+    var basePercent = (totalScore / maxScore * 100);
     // 不同测评类型各维度权重不同
     var weights = {
       1: [1.3, 1.1, 0.9, 0.7, 1.0], // SAS情绪压力量表 -> 情绪和压力高

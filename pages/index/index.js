@@ -1,5 +1,6 @@
 // pages/index/index.js
 const auth = require("../../utils/auth")
+const semesterService = require("../../utils/semester")
 
 Page({
   data: {
@@ -83,11 +84,12 @@ Page({
       this.setData({ pendingAssessmentCount: 0, pendingTasks: [], recentResult: null })
       return
     }
-    const tasks = wx.getStorageSync("assessmentTasks") || []
+    const currentSemester = semesterService.getCurrentSemester()
+    const tasks = (wx.getStorageSync("assessmentTasks") || []).filter(item => !currentSemester || !item.semesterId || item.semesterId === currentSemester.id)
     const results = (wx.getStorageSync("assessmentResults") || []).filter(item => item.studentId === user.studentId)
     const pendingTasks = tasks.filter(item => !item.completed && item.status !== "已结束")
     const recentResult = results.length ? results.slice().sort((a, b) => b.id - a.id)[0] : null
-    this.setData({ pendingAssessmentCount: pendingTasks.length, pendingTasks, recentResult })
+    this.setData({ pendingAssessmentCount: pendingTasks.length, pendingTasks, recentResult, currentSemester: currentSemester ? currentSemester.name : "未设置当前学期" })
   },
 
   onBannerTap(e) {

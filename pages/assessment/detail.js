@@ -3,6 +3,8 @@ var questionSets = {"sas": [{"id": 1, "title": "我觉得比平时容易紧张�
 
 var scaleKeys = {1:"sas",2:"sds",3:"stress",4:"relate",5:"emotion",6:"self_esteem",7:"sleep",8:"resilience",9:"mbti"};
 var auth = require('../../utils/auth');
+var scoringEngine = require('../../utils/scoring-engine');
+var semesterService = require('../../utils/semester');
 
 Page({
   data: {consentGiven: false,
@@ -115,21 +117,82 @@ Page({
   doSubmit: function() {
     var answers = this.data.answers;
     var questions = this.data.questions;
-    var totalScore = 0;
-    for (var i = 0; i < questions.length; i++) {
-      if (answers[i] !== undefined) {
-        totalScore += questions[i].options[answers[i]].score;
-      }
-    }
     var id = this.data.assessmentId;
+    var tasks = wx.getStorageSync("assessmentTasks") || [];
+    var taskId = parseInt(this.data.taskId) || 0;
+    var task = tasks.find(function(item) { return item.id === taskId; }) || {};
+    var assessments = wx.getStorageSync("assessments") || [];
+    var assessment = assessments.find(function(item) { return item.id === id; }) || { id: id, name: "心理健康测评" };
+    var rule;
+    var outcome;
+    try {
+      rule = scoringEngine.getRule(id, task.scoringVersion);
+      outcome = scoringEngine.scoreAssessment({ assessmentId: id, questions: questions, answers: answers, rule: rule });
+    } catch (error) {
+      wx.showToast({ title: error.message || "评分规则加载失败", icon: "none" });
+      return;
+    }
+    if (!outcome.complete) {
+      wx.showToast({ title: "请完成全部题目后再提交", icon: "none" });
+      return;
+    }
+
+    var semester = task.semesterId
+      ? semesterService.getSemesterSnapshot(task.semesterId)
+      : semesterService.getSemesterSnapshot();
+    var user = wx.getStorageSync("userInfo") || {};
+    var result = scoringEngine.createResultSnapshot({
+      assessment: assessment,
+      task: task,
+      semester: semester,
+      questions: questions,
+      outcome: outcome,
+      rule: rule,
+      studentId: user.studentId || "demo-student"
+    });
+    var results = wx.getStorageSync("assessmentResults") || [];
+    results.push(result);
+    wx.setStorageSync("assessmentResults", results);
+
+    var students = wx.getStorageSync("classStudents") || [];
+    students = students.map(function(item) {
+      if (item.studentId === result.studentId) {
+        item.completion = "已完成";
+        item.riskLevel = result.riskLevel;
+        item.latestScore = result.stdScore;
+      }
+      return item;
+    });
+    wx.setStorageSync("classStudents", students);
+
+    if (scoringEngine.riskSeverity(result.riskLevel) > 0) {
+      var student = students.find(function(item) { return item.studentId === result.studentId; }) || {};
+      var riskEvents = wx.getStorageSync("riskEvents") || [];
+      riskEvents.push({
+        id: result.id,
+        resultId: result.id,
+        studentId: result.studentId,
+        studentName: student.studentName || user.nickName || "学生",
+        classId: student.classId || user.classId || "",
+        className: student.className || user.className || "未分班",
+        level: result.riskLevel,
+        source: task.title || assessment.name,
+        createdAt: new Date().toLocaleString(),
+        status: "待确认",
+        summary: outcome.triggeredRules.length
+          ? "关键题规则已触发，请由有权限人员及时人工复核。"
+          : "风险标准分达到关注阈值，请结合实际情况人工复核。"
+      });
+      wx.setStorageSync("riskEvents", riskEvents);
+    }
+
     if (this.data.draftKey) wx.removeStorageSync(this.data.draftKey);
     if (this.data.taskId) {
-      var tasks = wx.getStorageSync("assessmentTasks") || [];
       tasks = tasks.map(function(task) { if (task.id === parseInt(this.data.taskId)) task.completed = true; return task; }, this);
       wx.setStorageSync("assessmentTasks", tasks);
     }
     wx.redirectTo({
-      url: "/pages/assessment/result?id=" + id + "&score=" + totalScore + "&total=" + questions.length + "&taskId=" + this.data.taskId
+      url: "/pages/assessment/result?id=" + id + "&resultId=" + result.id + "&readonly=1"
     });
   }
 });

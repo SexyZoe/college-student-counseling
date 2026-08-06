@@ -13,7 +13,7 @@ Page({
       if (!grouped[item.classId]) grouped[item.classId] = { id: item.classId, name: item.className, total: 0, completed: 0, highRisk: 0 }
       grouped[item.classId].total++
       if (item.completion === "已完成") grouped[item.classId].completed++
-      if (item.riskLevel === "较高风险") grouped[item.classId].highRisk++
+      if (item.riskLevel === "较高风险" || item.riskLevel === "紧急风险") grouped[item.classId].highRisk++
     })
     const classes = Object.values(grouped).map(item => { item.rate = item.total ? Math.round(item.completed / item.total * 100) : 0; return item })
     this.setData({
