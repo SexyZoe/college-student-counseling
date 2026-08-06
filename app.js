@@ -1,10 +1,13 @@
 // app.js
 const auth = require("./utils/auth")
+const scoringEngine = require("./utils/scoring-engine")
+const semesterService = require("./utils/semester")
 
 App({
   onLaunch() {
     this.migrateLocalData()
     this.initLocalDemoData()
+    semesterService.ensureSemesterState()
     auth.restoreSession(this)
   },
 
@@ -37,6 +40,28 @@ App({
       wx.setStorageSync("articles", this.getArticles().concat(userSubmissions))
       wx.setStorageSync("schemaVersion", 2)
     }
+    if (schemaVersion < 3) {
+      // V3 为问卷、评分规则和学期归属补充稳定版本；历史结果不重新计分。
+      const assessments = (wx.getStorageSync("assessments") || []).map(item => Object.assign({}, item, {
+        questionnaireVersion: item.questionnaireVersion || scoringEngine.QUESTIONNAIRE_VERSION,
+        scoringVersion: item.scoringVersion || scoringEngine.SCORING_VERSION
+      }))
+      if (assessments.length) wx.setStorageSync("assessments", assessments)
+      const semesters = wx.getStorageSync("semesters") || []
+      const current = semesters.find(item => item.status === "当前学期") || semesters[0] || {}
+      const tasks = (wx.getStorageSync("assessmentTasks") || []).map(item => {
+        const assessment = assessments.find(scale => scale.id === item.assessmentId) || {}
+        const linkedSemester = semesters.find(semester => semester.id === item.semesterId || semester.name === item.semester) || current
+        return Object.assign({}, item, {
+          semesterId: item.semesterId || linkedSemester.id || "",
+          semester: item.semester === "当前学期" ? (linkedSemester.name || "未关联学期") : (item.semester || linkedSemester.name || "未关联学期"),
+          questionnaireVersion: item.questionnaireVersion || assessment.questionnaireVersion || scoringEngine.QUESTIONNAIRE_VERSION,
+          scoringVersion: item.scoringVersion || scoringEngine.SCORING_VERSION
+        })
+      })
+      if (tasks.length) wx.setStorageSync("assessmentTasks", tasks)
+      wx.setStorageSync("schemaVersion", 3)
+    }
   },
 
   initLocalDemoData() {
@@ -63,7 +88,10 @@ App({
       { id: 6, name: "自尊量表(SES)", description: "了解自我价值感与自我接纳，共10题", questions: 10, duration: 3, category: "自我认知", color: "#f7b7a0", status: "可选" },
       { id: 7, name: "睡眠质量评估(PSQI)", description: "了解近期睡眠质量，共10题", questions: 10, duration: 3, category: "睡眠健康", color: "#c9b1d0", status: "可选" },
       { id: 8, name: "心理韧性量表(CD-RISC)", description: "了解面对挫折时的恢复能力，共12题", questions: 12, duration: 3, category: "自我成长", color: "#95d0c0", status: "可选" }
-    ]
+    ].map(item => Object.assign(item, {
+      questionnaireVersion: scoringEngine.QUESTIONNAIRE_VERSION,
+      scoringVersion: scoringEngine.SCORING_VERSION
+    }))
   },
 
   getArticles() {
@@ -89,15 +117,15 @@ App({
 
   getAssessmentTasks() {
     return [
-      { id: 101, assessmentId: 1, title: "秋季学期心理状态普测", semester: "2026-2027学年第一学期", deadline: "2026-09-30", status: "进行中", completed: false },
-      { id: 102, assessmentId: 3, title: "期中学业压力自评", semester: "2026-2027学年第一学期", deadline: "2026-11-15", status: "未开始", completed: false },
-      { id: 103, assessmentId: 7, title: "睡眠健康自查", semester: "2026-2027学年第一学期", deadline: "2026-10-20", status: "进行中", completed: true }
+      { id: 101, assessmentId: 1, title: "秋季学期心理状态普测", semesterId: "2026-1", semester: "2026-2027学年第一学期", questionnaireVersion: "1.0.0", scoringVersion: "2.0.0", deadline: "2026-09-30", status: "进行中", completed: false },
+      { id: 102, assessmentId: 3, title: "期中学业压力自评", semesterId: "2026-1", semester: "2026-2027学年第一学期", questionnaireVersion: "1.0.0", scoringVersion: "2.0.0", deadline: "2026-11-15", status: "未开始", completed: false },
+      { id: 103, assessmentId: 7, title: "睡眠健康自查", semesterId: "2026-1", semester: "2026-2027学年第一学期", questionnaireVersion: "1.0.0", scoringVersion: "2.0.0", deadline: "2026-10-20", status: "进行中", completed: true }
     ]
   },
 
   getAssessmentResults() {
     return [
-      { id: 10001, studentId: "2024001", assessmentId: 7, assessmentName: "睡眠质量评估(PSQI)", score: 22, total: 10, stdScore: 55, level: "关注", riskLevel: "关注", dimensions: [{ label: "情绪状态", value: 72 }, { label: "压力负荷", value: 60 }, { label: "睡眠精力", value: 48 }, { label: "人际适应", value: 78 }, { label: "学业适应", value: 66 }], date: "2026-07-25" }
+      { id: 10001, studentId: "2024001", assessmentId: 7, assessmentName: "睡眠质量评估(PSQI)", score: 22, total: 10, stdScore: 55, normalizedRiskScore: 45, level: "关注", riskLevel: "关注", semesterId: "2025-2", semesterName: "2025-2026学年第二学期", questionnaireVersion: "legacy-1.0", scoringVersion: "legacy-1.0", dimensions: [{ label: "情绪状态", value: 72 }, { label: "压力负荷", value: 60 }, { label: "睡眠精力", value: 48 }, { label: "人际适应", value: 78 }, { label: "学业适应", value: 66 }], date: "2026-07-25" }
     ]
   },
 

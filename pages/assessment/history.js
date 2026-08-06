@@ -24,8 +24,9 @@ Page({
     var trend = "保持稳定";
     var trendColor = "#8fc8b5";
     if (filtered.length >= 2) {
-      var first = filtered[0].score;
-      var last = filtered[filtered.length - 1].score;
+      var first = filtered[0].normalizedRiskScore !== undefined ? filtered[0].normalizedRiskScore : filtered[0].score;
+      var lastItem = filtered[filtered.length - 1];
+      var last = lastItem.normalizedRiskScore !== undefined ? lastItem.normalizedRiskScore : lastItem.score;
       if (last < first) { trend = "呈下降趋势 ↓"; trendColor = "#8fc8b5"; }
       else if (last > first) { trend = "呈上升趋势 ↑"; trendColor = "#f4a3a8"; }
     }
@@ -44,7 +45,7 @@ Page({
     var item = this.data.historyList.find(function(r) { return r.id === id; });
     if (item) {
       wx.navigateTo({
-        url: "/pages/assessment/result?id=" + item.assessmentId + "&score=" + item.score + "&total=" + item.total + "&readonly=1"
+        url: "/pages/assessment/result?id=" + item.assessmentId + "&resultId=" + item.id + "&readonly=1"
       });
     }
   },

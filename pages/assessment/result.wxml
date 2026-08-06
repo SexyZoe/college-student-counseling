@@ -4,9 +4,10 @@
     <view class="score-circle" style="border-color: {{levelColor}};">
       <text class="score-number">{{score}}</text>
       <text class="score-total">/ {{total}}</text>
-      <text class="std-score">T分: {{stdScore}}</text>
+      <text class="std-score">状态指数: {{stdScore}}</text>
     </view>
     <text class="result-level" style="color: {{levelColor}};">{{level}}</text>
+    <text class="result-desc">风险分层：{{riskLevel}}</text>
     <text class="result-desc">{{levelDesc}}</text>
   </view>
 
@@ -14,6 +15,11 @@
   <view class="disclaimer-bar">
     <van-icon name="info-o" size="14px" color="#999" />
     <text>本结果仅用于心理健康教育和风险筛查参考，不构成医疗诊断。</text>
+  </view>
+
+  <view class="disclaimer-bar" wx:if="{{triggeredRules.length > 0}}">
+    <van-icon name="warning-o" size="14px" color="#d96b72" />
+    <text>关键题规则已触发，系统已生成待人工复核提示；如感到自身安全受到威胁，请立即联系可信任的人或紧急求助渠道。</text>
   </view>
 
   <!-- 五维雷达图 -->
