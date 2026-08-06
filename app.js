@@ -2,6 +2,7 @@
 const auth = require("./utils/auth")
 const scoringEngine = require("./utils/scoring-engine")
 const semesterService = require("./utils/semester")
+const resultSync = require("./utils/result-sync")
 
 App({
   onLaunch() {
@@ -9,6 +10,7 @@ App({
     this.initLocalDemoData()
     semesterService.ensureSemesterState()
     auth.restoreSession(this)
+    resultSync.flushPendingResults().catch(function() {})
   },
 
   globalData: {

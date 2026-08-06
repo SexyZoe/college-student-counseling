@@ -1,4 +1,5 @@
 const auth = require('../../utils/auth')
+const apiClient = require('../../utils/api-client')
 Page({
   data: { event: {}, statuses: ["已联系", "待联系", "已转介", "已关闭"], selectedStatus: "", note: "" },
   onLoad(options) { if (!auth.requireRole('counselor')) return; const event = (wx.getStorageSync("riskEvents") || []).find(item => item.id === parseInt(options.id)) || {}; this.setData({ event }) },
@@ -14,6 +15,9 @@ Page({
     let risks = wx.getStorageSync("riskEvents") || []
     risks = risks.map(item => { if (item.id === this.data.event.id) item.status = this.data.selectedStatus === "已关闭" ? "已关闭" : "跟进中"; return item })
     wx.setStorageSync("riskEvents", risks)
+    if (apiClient.getSettings().enabled) {
+      apiClient.updateRiskEvent(this.data.event.id, { status:this.data.selectedStatus === "已关闭" ? "已关闭" : "跟进中", followupNote:this.data.note.trim() }).catch(error => wx.setStorageSync("backendLastError", { code:error.code, message:error.message, time:Date.now() }))
+    }
     wx.showToast({ title: "跟进记录已保存", icon: "success" }); setTimeout(() => wx.navigateBack(), 500)
   }
 })

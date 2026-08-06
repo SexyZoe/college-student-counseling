@@ -2,3 +2,7 @@
 project.private.config.json
 node_modules/
 *.log
+server/data/
+server/*.db
+server/*.db-shm
+server/*.db-wal

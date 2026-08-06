@@ -5,6 +5,7 @@ var scaleKeys = {1:"sas",2:"sds",3:"stress",4:"relate",5:"emotion",6:"self_estee
 var auth = require('../../utils/auth');
 var scoringEngine = require('../../utils/scoring-engine');
 var semesterService = require('../../utils/semester');
+var resultSync = require('../../utils/result-sync');
 
 Page({
   data: {consentGiven: false,
@@ -150,9 +151,12 @@ Page({
       rule: rule,
       studentId: user.studentId || "demo-student"
     });
+    result.submissionId = "client:" + result.studentId + ":" + result.id;
+    result.syncStatus = "pending";
     var results = wx.getStorageSync("assessmentResults") || [];
     results.push(result);
     wx.setStorageSync("assessmentResults", results);
+    resultSync.enqueueResult(result);
 
     var students = wx.getStorageSync("classStudents") || [];
     students = students.map(function(item) {

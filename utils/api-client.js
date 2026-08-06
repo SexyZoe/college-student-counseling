@@ -1,0 +1,132 @@
+const API_BASE_URL_KEY = "backendApiBaseUrl"
+const API_ENABLED_KEY = "backendSyncEnabled"
+const BACKEND_SESSION_KEY = "backendSession"
+const DEFAULT_BASE_URL = "http://127.0.0.1:8787"
+
+function BackendError(status, code, message, details) {
+  this.name = "BackendError"
+  this.status = status || 0
+  this.code = code || "NETWORK_ERROR"
+  this.message = message || "后端服务暂时不可用"
+  this.details = details || null
+}
+BackendError.prototype = Object.create(Error.prototype)
+BackendError.prototype.constructor = BackendError
+
+function getSettings() {
+  return {
+    enabled: wx.getStorageSync(API_ENABLED_KEY) === true,
+    baseUrl: String(wx.getStorageSync(API_BASE_URL_KEY) || DEFAULT_BASE_URL).replace(/\/$/, "")
+  }
+}
+
+function configure(options) {
+  if (options && options.baseUrl) wx.setStorageSync(API_BASE_URL_KEY, String(options.baseUrl).replace(/\/$/, ""))
+  if (options && options.enabled !== undefined) wx.setStorageSync(API_ENABLED_KEY, !!options.enabled)
+  return getSettings()
+}
+
+function getSession() {
+  return wx.getStorageSync(BACKEND_SESSION_KEY) || null
+}
+
+function clearSession() {
+  wx.removeStorageSync(BACKEND_SESSION_KEY)
+}
+
+function request(options) {
+  const settings = getSettings()
+  if (!settings.enabled) return Promise.reject(new BackendError(0, "BACKEND_DISABLED", "后端同步尚未启用"))
+  const session = getSession()
+  if (options.auth !== false && (!session || !session.token)) {
+    return Promise.reject(new BackendError(401, "AUTH_REQUIRED", "后端登录会话不存在"))
+  }
+  return new Promise(function(resolve, reject) {
+    const header = Object.assign({ "content-type": "application/json" }, options.header || {})
+    if (options.auth !== false) header.Authorization = "Bearer " + session.token
+    wx.request({
+      url: settings.baseUrl + options.path,
+      method: options.method || "GET",
+      data: options.data,
+      header: header,
+      timeout: options.timeout || 5000,
+      success: function(response) {
+        const body = response.data || {}
+        if (response.statusCode >= 200 && response.statusCode < 300 && body.ok !== false) {
+          resolve(body.data)
+          return
+        }
+        const error = body.error || {}
+        reject(new BackendError(response.statusCode, error.code, error.message, error.details))
+      },
+      fail: function(error) {
+        reject(new BackendError(0, "NETWORK_ERROR", error && error.errMsg ? error.errMsg : "无法连接后端服务"))
+      }
+    })
+  })
+}
+
+function login(credentials) {
+  return request({ path: "/api/v1/auth/login", method: "POST", data: credentials, auth: false }).then(function(result) {
+    wx.setStorageSync(BACKEND_SESSION_KEY, {
+      token: result.token,
+      expiresAt: Date.now() + result.expiresIn * 1000,
+      user: result.user
+    })
+    return result
+  })
+}
+
+function submitAssessmentResult(payload) {
+  return request({ path: "/api/v1/assessment-results", method: "POST", data: payload, timeout: 10000 })
+}
+
+function getAssessmentTasks() {
+  return request({ path: "/api/v1/assessment-tasks" })
+}
+
+function getMyResults() {
+  return request({ path: "/api/v1/assessment-results/me" })
+}
+
+function getCounselorClasses() {
+  return request({ path: "/api/v1/counselor/classes" })
+}
+
+function getClassSummary(classId) {
+  return request({ path: "/api/v1/counselor/classes/" + encodeURIComponent(classId) + "/summary" })
+}
+
+function getRiskEvents(status) {
+  return request({ path: "/api/v1/counselor/risk-events" + (status ? "?status=" + encodeURIComponent(status) : "") })
+}
+
+function updateRiskEvent(id, data) {
+  return request({ path: "/api/v1/counselor/risk-events/" + encodeURIComponent(id), method: "PATCH", data: data })
+}
+
+function getStudentSupportSummary(studentId) {
+  return request({ path: "/api/v1/counselor/students/" + encodeURIComponent(studentId) + "/summary" })
+}
+
+module.exports = {
+  API_BASE_URL_KEY: API_BASE_URL_KEY,
+  API_ENABLED_KEY: API_ENABLED_KEY,
+  BACKEND_SESSION_KEY: BACKEND_SESSION_KEY,
+  DEFAULT_BASE_URL: DEFAULT_BASE_URL,
+  BackendError: BackendError,
+  getSettings: getSettings,
+  configure: configure,
+  getSession: getSession,
+  clearSession: clearSession,
+  request: request,
+  login: login,
+  submitAssessmentResult: submitAssessmentResult,
+  getAssessmentTasks: getAssessmentTasks,
+  getMyResults: getMyResults,
+  getCounselorClasses: getCounselorClasses,
+  getClassSummary: getClassSummary,
+  getRiskEvents: getRiskEvents,
+  updateRiskEvent: updateRiskEvent,
+  getStudentSupportSummary: getStudentSupportSummary
+}

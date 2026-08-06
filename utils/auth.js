@@ -191,6 +191,7 @@ function clearSession(reason) {
   const user = wx.getStorageSync("userInfo") || {}
   wx.removeStorageSync("userInfo")
   wx.removeStorageSync(AUTH_SESSION_KEY)
+  wx.removeStorageSync("backendSession")
   wx.removeStorageSync("pendingAccount")
   setAppAuthState(null)
   if (user.accountId) appendAudit("退出登录", { role: user.role, accountId: user.accountId, reason: reason || "用户主动退出" })

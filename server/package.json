@@ -1,0 +1,13 @@
+{
+  "name": "shuzhi-heart-harbor-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "数智心港湾测评数据闭环后端",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  }
+}
