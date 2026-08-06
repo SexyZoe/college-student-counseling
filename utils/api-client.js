@@ -109,6 +109,46 @@ function getStudentSupportSummary(studentId) {
   return request({ path: "/api/v1/counselor/students/" + encodeURIComponent(studentId) + "/summary" })
 }
 
+function getAdminSemesters() {
+  return request({ path: "/api/v1/admin/semesters" })
+}
+
+function createAdminSemester(data) {
+  return request({ path: "/api/v1/admin/semesters", method:"POST", data:data })
+}
+
+function setAdminCurrentSemester(semesterId) {
+  return request({ path: "/api/v1/admin/semesters/" + encodeURIComponent(semesterId) + "/current", method:"PATCH", data:{} })
+}
+
+function getAdminStudents() {
+  return request({ path: "/api/v1/admin/students" })
+}
+
+function getAdminAssignments(semesterId) {
+  return request({ path: "/api/v1/admin/counselor-assignments" + (semesterId ? "?semesterId=" + encodeURIComponent(semesterId) : "") })
+}
+
+function getImportBatches() {
+  return request({ path: "/api/v1/admin/import-batches" })
+}
+
+function getImportBatch(batchId) {
+  return request({ path: "/api/v1/admin/import-batches/" + encodeURIComponent(batchId) })
+}
+
+function previewPersonnelImport(data) {
+  return request({ path: "/api/v1/admin/import-batches/preview", method:"POST", data:data, timeout:15000 })
+}
+
+function confirmImportBatch(batchId) {
+  return request({ path: "/api/v1/admin/import-batches/" + encodeURIComponent(batchId) + "/confirm", method:"POST", data:{}, timeout:15000 })
+}
+
+function rollbackImportBatch(batchId) {
+  return request({ path: "/api/v1/admin/import-batches/" + encodeURIComponent(batchId) + "/rollback", method:"POST", data:{}, timeout:15000 })
+}
+
 module.exports = {
   API_BASE_URL_KEY: API_BASE_URL_KEY,
   API_ENABLED_KEY: API_ENABLED_KEY,
@@ -128,5 +168,15 @@ module.exports = {
   getClassSummary: getClassSummary,
   getRiskEvents: getRiskEvents,
   updateRiskEvent: updateRiskEvent,
-  getStudentSupportSummary: getStudentSupportSummary
+  getStudentSupportSummary: getStudentSupportSummary,
+  getAdminSemesters: getAdminSemesters,
+  createAdminSemester: createAdminSemester,
+  setAdminCurrentSemester: setAdminCurrentSemester,
+  getAdminStudents: getAdminStudents,
+  getAdminAssignments: getAdminAssignments,
+  getImportBatches: getImportBatches,
+  getImportBatch: getImportBatch,
+  previewPersonnelImport: previewPersonnelImport,
+  confirmImportBatch: confirmImportBatch,
+  rollbackImportBatch: rollbackImportBatch
 }

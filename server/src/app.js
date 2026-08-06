@@ -61,6 +61,30 @@ function createHttpApp(services, config) {
       if (request.method === "POST" && path === "/api/v1/admin/counselor-assignments") {
         return sendOk(response, services.createCounselorAssignment(user, await readJson(request, config.maxBodyBytes)), 201)
       }
+      if (request.method === "GET" && path === "/api/v1/admin/students") {
+        return sendOk(response, services.listAdminStudents(user))
+      }
+      if (request.method === "GET" && path === "/api/v1/admin/counselor-assignments") {
+        return sendOk(response, services.listAdminAssignments(user, url.searchParams.get("semesterId") || ""))
+      }
+      if (request.method === "GET" && path === "/api/v1/admin/import-batches") {
+        return sendOk(response, services.listImportBatches(user))
+      }
+      if (request.method === "POST" && path === "/api/v1/admin/import-batches/preview") {
+        return sendOk(response, services.previewPersonnelImport(user, await readJson(request, config.maxBodyBytes)), 201)
+      }
+      const importBatchMatch = path.match(/^\/api\/v1\/admin\/import-batches\/(\d+)$/)
+      if (request.method === "GET" && importBatchMatch) {
+        return sendOk(response, services.getImportBatch(user, Number(importBatchMatch[1])))
+      }
+      const confirmImportMatch = path.match(/^\/api\/v1\/admin\/import-batches\/(\d+)\/confirm$/)
+      if (request.method === "POST" && confirmImportMatch) {
+        return sendOk(response, services.confirmImportBatch(user, Number(confirmImportMatch[1])))
+      }
+      const rollbackImportMatch = path.match(/^\/api\/v1\/admin\/import-batches\/(\d+)\/rollback$/)
+      if (request.method === "POST" && rollbackImportMatch) {
+        return sendOk(response, services.rollbackImportBatch(user, Number(rollbackImportMatch[1])))
+      }
       throw new HttpError(404, "NOT_FOUND", "接口不存在")
     } catch (error) {
       const status = error instanceof HttpError ? error.status : 500
