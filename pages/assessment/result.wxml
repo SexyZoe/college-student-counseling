@@ -1,10 +1,15 @@
-<view class="result-container">
-  <!-- 头部：分数+等级 -->
+﻿<view class="result-container">
+  <!-- 头部：分数 + wellbeing 指数环 -->
   <view class="result-header" style="background: linear-gradient(135deg, {{levelColor}}30, {{levelColor}}10);">
-    <view class="score-circle" style="border-color: {{levelColor}};">
-      <text class="score-number">{{score}}</text>
-      <text class="score-total">/ {{total}}</text>
-      <text class="std-score">状态指数: {{stdScore}}</text>
+    <view class="score-ring-wrapper">
+      <view class="score-circle" style="border-color: {{levelColor}};">
+        <text class="score-number">{{score}}</text>
+        <text class="score-total">/ {{total}}</text>
+      </view>
+      <view class="wellbeing-ring" style="border-color: {{levelColor}};">
+        <text class="wellbeing-value">{{wellbeingIndex}}</text>
+        <text class="wellbeing-label">幸福指数</text>
+      </view>
     </view>
     <text class="result-level" style="color: {{levelColor}};">{{level}}</text>
     <text class="result-desc">风险分层：{{riskLevel}}</text>
@@ -28,6 +33,38 @@
     <canvas type="2d" id="radarCanvas" class="radar-canvas"></canvas>
   </view>
 
+  <!-- 五维详情卡片 -->
+  <view class="result-section" wx:if="{{dimCards.length}}">
+    <text class="section-title">各维度详情</text>
+    <view class="dim-cards">
+      <view class="dim-card" wx:for="{{dimCards}}" wx:key="label">
+        <view class="dim-card-header">
+          <text class="dim-label">{{item.label}}</text>
+          <text class="dim-trend" wx:if="{{trendArrows[index]}}">{{trendArrows[index]}}</text>
+          <text class="dim-status" style="color: {{item.statusColor}};">{{item.status}}</text>
+        </view>
+        <view class="dim-bar-track">
+          <view class="dim-bar-fill" style="width: {{item.value}}%; background: {{item.barColor}};"></view>
+        </view>
+        <view class="dim-card-footer">
+          <text class="dim-value">{{item.value}}</text>
+          <text class="dim-unit">/ 100</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 最弱维度建议 -->
+  <view class="result-section" wx:if="{{lowestDimLabel}}">
+    <view class="lowest-dim-card">
+      <van-icon name="point-gift-o" size="20px" color="#f4a3a8" />
+      <view class="lowest-dim-body">
+        <text class="lowest-dim-title">改善重点：{{lowestDimLabel}}</text>
+        <text class="lowest-dim-advice">{{lowestDimAdvice}}</text>
+      </view>
+    </view>
+  </view>
+
   <!-- 测评分析 -->
   <view class="result-section">
     <text class="section-title">测评分析</text>
@@ -35,11 +72,14 @@
   </view>
 
   <view class="support-card" bindtap="goHelp">
-    <view><text class="support-title">需要进一步支持？</text><text class="support-text">查看校心理中心、辅导员和紧急求助渠道</text></view>
+    <view>
+      <text class="support-title">需要进一步支持？</text>
+      <text class="support-text">查看校心理中心、辅导员和紧急求助渠道</text>
+    </view>
     <van-icon name="arrow" size="16px" color="#999" />
   </view>
 
-  <!-- 建议方案 -->
+  <!-- 改善方案 -->
   <view class="result-section">
     <text class="section-title">个性化建议</text>
     <view class="suggestion-list">

@@ -1,4 +1,4 @@
-const SCORING_VERSION = "2.0.0"
+﻿const SCORING_VERSION = "2.0.0"
 const QUESTIONNAIRE_VERSION = "1.0.0"
 
 // 当前阈值用于产品原型和流程联调，不构成临床诊断标准；上线前必须由心理专业人员审定并形成新版本。
@@ -130,6 +130,46 @@ function scoreAssessment(options) {
       }
     }
   })
+
+  // 复杂题型加权（在原始分数基础上）
+  if (options.complexTypes && Object.keys(options.complexTypes).length > 0) {
+    var complexRaw = 0;
+    var complexMin = 0;
+    var complexMax = 0;
+    var ctypes = options.complexTypes;
+    for (var cIdx in ctypes) {
+      if (!ctypes.hasOwnProperty(cIdx)) continue;
+      var cInfo = ctypes[cIdx];
+      if (cInfo.pattern === 'binary') {
+        complexRaw += (cInfo.answer === 0 ? (cInfo.scoreTrue || 1) : (cInfo.scoreFalse || 0));
+        complexMin += 0;
+        complexMax += Math.max(cInfo.scoreTrue || 1, cInfo.scoreFalse || 0);
+      } else if (cInfo.pattern === 'sum' && Array.isArray(cInfo.answer)) {
+        for (var sIdx = 0; sIdx < cInfo.answer.length; sIdx++) {
+          var opt = (cInfo.options || [])[cInfo.answer[sIdx]];
+          complexRaw += opt ? (opt.score || 1) : 0;
+        }
+      } else if (cInfo.pattern === 'matrix') {
+        var matAns = cInfo.answer || {};
+        var matRows = cInfo.rows || [];
+        var matCols = cInfo.columns || [];
+        for (var r = 0; r < matRows.length; r++) {
+          var colIdx = matAns[matRows[r].id];
+          if (colIdx !== undefined && colIdx >= 0 && colIdx < matCols.length) {
+            complexRaw += matCols[colIdx].score || 1;
+          }
+        }
+        complexMin += matRows.length;
+        complexMax += matRows.length * ((matCols[matCols.length - 1] && matCols[matCols.length - 1].score) || 5);
+      }
+    }
+    if (complexMax > 0) {
+      var complexLinear = ((complexRaw - complexMin) / (complexMax - complexMin)) * 100;
+      complexLinear = clamp(Math.round(complexLinear), 0, 100);
+      normalizedRiskScore = clamp(Math.round((normalizedRiskScore + complexLinear) / 2), 0, 100);
+      band = getRiskBand(normalizedRiskScore, rule.thresholds);
+    }
+  }
 
   return {
     complete: missingQuestionIds.length === 0,
