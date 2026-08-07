@@ -1,18 +1,29 @@
-.result-container { min-height: 100vh; background: #faf7f2; padding-bottom: 40rpx; }
+﻿.result-container { min-height: 100vh; background: #faf7f2; padding-bottom: 40rpx; }
 
+/* 头部 */
 .result-header {
   display: flex; flex-direction: column; align-items: center;
   padding: 50rpx 30rpx 40rpx; margin-bottom: 20rpx;
 }
-.score-circle {
-  width: 160rpx; height: 160rpx; border-radius: 50%;
-  border: 6rpx solid; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; margin-bottom: 24rpx;
-  background: #fff;
+.score-ring-wrapper {
+  display: flex; align-items: center; gap: 30rpx; margin-bottom: 24rpx;
 }
-.score-number { font-size: 52rpx; font-weight: bold; color: #333; }
-.score-total { font-size: 24rpx; color: #999; }
-.std-score { font-size: 22rpx; color: #8fc8b5; margin-top: 4rpx; font-weight: 500; }
+.score-circle {
+  width: 150rpx; height: 150rpx; border-radius: 50%;
+  border: 6rpx solid; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; background: #fff;
+}
+.score-number { font-size: 48rpx; font-weight: bold; color: #333; }
+.score-total { font-size: 22rpx; color: #999; }
+
+.wellbeing-ring {
+  width: 130rpx; height: 130rpx; border-radius: 50%;
+  border: 6rpx solid; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; background: #fff;
+}
+.wellbeing-value { font-size: 36rpx; font-weight: bold; color: #444; }
+.wellbeing-label { font-size: 18rpx; color: #999; margin-top: 2rpx; }
+
 .result-level { font-size: 36rpx; font-weight: bold; margin-bottom: 8rpx; }
 .result-desc { font-size: 26rpx; color: #666; text-align: center; }
 
@@ -20,8 +31,7 @@
 .disclaimer-bar {
   display: flex; align-items: center; gap: 8rpx;
   margin: 0 30rpx 20rpx; padding: 16rpx 20rpx;
-  background: #fff; border-radius: 12rpx;
-  font-size: 22rpx; color: #999;
+  background: #fff; border-radius: 12rpx; font-size: 22rpx; color: #999;
 }
 
 /* 雷达图 */
@@ -38,6 +48,40 @@
 }
 .analysis-text { font-size: 28rpx; color: #555; line-height: 1.8; }
 
+/* 维度详情卡片 */
+.dim-cards { display: flex; flex-direction: column; gap: 20rpx; }
+.dim-card { padding: 20rpx 0; }
+.dim-card + .dim-card { border-top: 1rpx solid #f0ebe0; }
+.dim-card-header {
+  display: flex; align-items: center; margin-bottom: 12rpx;
+}
+.dim-label { font-size: 26rpx; color: #444; font-weight: 600; flex: 1; }
+.dim-trend { font-size: 22rpx; color: #f4a3a8; margin-right: 12rpx; font-weight: 600; }
+.dim-status { font-size: 22rpx; font-weight: 500; }
+.dim-bar-track {
+  width: 100%; height: 10rpx; background: #f0ebe3;
+  border-radius: 5rpx; overflow: hidden;
+}
+.dim-bar-fill {
+  height: 100%; border-radius: 5rpx;
+  transition: width 0.6s ease;
+}
+.dim-card-footer {
+  display: flex; align-items: baseline; margin-top: 8rpx;
+}
+.dim-value { font-size: 24rpx; color: #333; font-weight: 600; }
+.dim-unit { font-size: 20rpx; color: #aaa; margin-left: 4rpx; }
+
+/* 最弱维度改善卡片 */
+.lowest-dim-card {
+  display: flex; align-items: flex-start; gap: 16rpx;
+  padding: 20rpx; background: #fef5f6; border-radius: 16rpx;
+}
+.lowest-dim-body { flex: 1; }
+.lowest-dim-title { display: block; font-size: 26rpx; color: #d07a80; font-weight: 600; margin-bottom: 6rpx; }
+.lowest-dim-advice { display: block; font-size: 24rpx; color: #888; line-height: 1.6; }
+
+/* 建议列表 */
 .suggestion-list { margin-top: 0; }
 .suggestion-item { display: flex; align-items: flex-start; margin-bottom: 18rpx; }
 .suggestion-dot { width: 12rpx; height: 12rpx; border-radius: 50%; margin-right: 16rpx; margin-top: 8rpx; flex-shrink: 0; }
