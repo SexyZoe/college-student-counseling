@@ -1,19 +1,32 @@
-<!-- 知情同意弹窗 -->
-<van-dialog id="consent-dialog" show="{{!consentGiven}}" show-cancel-button="{{false}}" confirm-button-text="开始测评" bind:confirm="onConsentAgree" close-on-click-overlay="{{false}}">
+﻿<!-- 知情同意弹窗 -->
+<van-dialog id="consent-dialog" show="{{!consentGiven && !showRestoreModal}}" show-cancel-button="{{false}}" confirm-button-text="开始测评" bind:confirm="onConsentAgree" close-on-click-overlay="{{false}}">
   <view class="consent-body">
     <view class="consent-icon">🔒</view>
     <view class="consent-title">知情同意书</view>
     <view class="consent-text">本测评结果仅用于心理健康教育和风险筛查参考，不构成医疗诊断。您的个人数据受隐私保护，不会公开给其他学生或用于无关评价。</view>
     <view class="consent-points">
       <view class="consent-point">测评过程中，请根据实际情况诚实作答</view>
-      <view class="consent-point">答题进度会保存在当前设备，可稍后继续</view>
+      <view class="consent-point">答题进度会自动保存在当前设备，可稍后继续</view>
       <view class="consent-point">测评结果仅您本人可见</view>
       <view class="consent-point">当前演示版仅保存到本机，正式版需接入校内安全后端</view>
     </view>
   </view>
 </van-dialog>
 
-<!-- 测评内容（同意后方显示） -->
+<!-- 草稿恢复弹窗 -->
+<van-dialog id="restore-dialog" show="{{showRestoreModal}}" title="恢复答题进度" confirm-button-text="恢复继续" cancel-button-text="重新开始" bind:confirm="restoreDraft" bind:cancel="discardDraft" close-on-click-overlay="{{false}}">
+  <view class="restore-body">
+    <view class="restore-icon">💾</view>
+    <view class="restore-summary">检测到上次未完成的答题记录</view>
+    <view class="restore-detail" wx:if="{{draftInfo}}">
+      <text>已答：{{draftInfo.answeredCount}} / {{draftInfo.totalCount}} 题</text>
+      <text class="restore-time">保存时间：{{draftInfo.savedTime}}</text>
+    </view>
+    <view class="restore-hint">点击"恢复继续"从上次中断处继续答题</view>
+  </view>
+</van-dialog>
+
+<!-- 答题内容（同意后显示） -->
 <view class="page" wx:if="{{consentGiven}}">
   <view class="progress-header">
     <view class="progress-bar">
@@ -22,7 +35,13 @@
     <view class="progress-text">{{currentIndex + 1}}/{{totalQuestions}}</view>
   </view>
 
-  <view class="question-area" wx:key="id" wx:for="{{questions}}" wx:if="{{index === currentIndex}}">
+  <!-- 自动保存状态提示 -->
+  <view class="draft-indicator" wx:if="{{showDraftIndicator}}">
+    <view class="draft-dot"></view>
+    <text class="draft-text">{{draftSavedText}}</text>
+  </view>
+
+  <view class="question-area" wx:for="{{questions}}" wx:key="id" wx:if="{{index === currentIndex}}">
     <view class="question-number">Q{{index + 1}}</view>
     <view class="question-title">{{item.title}}</view>
 
