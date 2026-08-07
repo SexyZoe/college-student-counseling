@@ -26,6 +26,9 @@ Page({
     isFirst: true,
     isLast: false,
     progress: 0,
+    shuffleOrder: null,
+    multiSelected: [],
+    matrixAnswers: {},
     showRestoreModal: false,
     draftInfo: null,
     draftSavedText: '',
@@ -88,6 +91,26 @@ Page({
     });
   },
 
+
+  _initQuestionState: function(questionIndex) {
+    var q = this.data.questions[questionIndex];
+    if (!q || !q.type || q.type === "single") {
+      this.setData({ multiSelected: [], matrixAnswers: {} });
+      return;
+    }
+    if (q.type === "multiple") {
+      var ans = this.data.answers[questionIndex];
+      this.setData({ multiSelected: Array.isArray(ans) ? ans.slice() : [], matrixAnswers: {} });
+    } else if (q.type === "matrix") {
+      var ans = this.data.answers[questionIndex];
+      this.setData({ matrixAnswers: (ans && typeof ans === "object") ? JSON.parse(JSON.stringify(ans)) : {}, multiSelected: [] });
+    } else if (q.type === "boolean") {
+      var ans = this.data.answers[questionIndex];
+      this.setData({ selectedOption: (ans !== undefined && ans !== null) ? ans : -1, multiSelected: [], matrixAnswers: {} });
+    } else {
+      this.setData({ multiSelected: [], matrixAnswers: {} });
+    }
+  },
   restoreDraft: function() {
     wx.showToast({ title: '已恢复答题进度', icon: 'success' });
     this.setData({ showRestoreModal: false, consentGiven: true });
@@ -133,6 +156,48 @@ Page({
     }
   },
 
+
+  onMultiSelect: function(e) {
+    var optIdx = e.currentTarget.dataset.index;
+    var selected = this.data.multiSelected.slice();
+    var idx = selected.indexOf(optIdx);
+    var question = this.data.questions[this.data.currentIndex];
+    var maxSelect = question.maxSelect || (question.options ? question.options.length : 99);
+    if (idx >= 0) {
+      selected.splice(idx, 1);
+    } else {
+      if (selected.length >= maxSelect) {
+        wx.showToast({ title: "最多选择 " + maxSelect + " 项", icon: "none" });
+        return;
+      }
+      selected.push(optIdx);
+      selected.sort(function(a, b) { return a - b; });
+    }
+    var answers = this.data.answers;
+    answers[this.data.currentIndex] = selected;
+    this.setData({ multiSelected: selected, answers: answers });
+    this.saveDraft();
+  },
+
+  onMatrixSelect: function(e) {
+    var rowId = e.currentTarget.dataset.rowId;
+    var colIdx = e.currentTarget.dataset.colIdx;
+    var matrixAnswers = this.data.matrixAnswers;
+    matrixAnswers = JSON.parse(JSON.stringify(matrixAnswers));
+    matrixAnswers[rowId] = colIdx;
+    var answers = this.data.answers;
+    answers[this.data.currentIndex] = matrixAnswers;
+    this.setData({ matrixAnswers: matrixAnswers, answers: answers });
+    this.saveDraft();
+  },
+
+  onBooleanSelect: function(e) {
+    var value = parseInt(e.currentTarget.dataset.value);
+    var answers = this.data.answers;
+    answers[this.data.currentIndex] = value;
+    this.setData({ selectedOption: value, answers: answers });
+    this.saveDraft();
+  },
   onSelectOption: function(e) {
     var optIdx = e.currentTarget.dataset.index;
     var answers = this.data.answers;
@@ -150,7 +215,9 @@ Page({
       updatedAt: now,
       assessmentId: this.data.assessmentId,
       taskId: this.data.taskId,
-      answeredCount: Object.keys(this.data.answers).length
+      answeredCount: Object.keys(this.data.answers).length,
+      multiSelected: this.data.multiSelected.slice(),
+      matrixAnswers: JSON.parse(JSON.stringify(this.data.matrixAnswers))
     });
     var prefix = isAuto ? '答题已自动保存 ' : '答题已保存 ';
     this.setData({ draftSavedText: prefix + this.formatTimeShort(now), showDraftIndicator: true });
@@ -239,7 +306,21 @@ Page({
     var outcome;
     try {
       rule = scoringEngine.getRule(id, task.scoringVersion);
-      outcome = scoringEngine.scoreAssessment({ assessmentId: id, questions: questions, answers: answers, rule: rule });
+      var complexTypes = {};
+    for (var qi = 0; qi < questions.length; qi++) {
+      var q = questions[qi];
+      if (!q || !q.type || q.type === 'single') continue;
+      var ans = answers[qi];
+      if (ans === undefined || ans === null) continue;
+      if (q.type === 'multiple') {
+        complexTypes[qi] = { pattern: 'sum', options: q.options || [], answer: Array.isArray(ans) ? ans : [] };
+      } else if (q.type === 'matrix') {
+        complexTypes[qi] = { pattern: 'matrix', rows: q.rows || [], columns: q.columns || [], answer: (ans && typeof ans === 'object') ? ans : {} };
+      } else if (q.type === 'boolean') {
+        complexTypes[qi] = { pattern: 'binary', answer: ans, scoreTrue: q.scoreTrue, scoreFalse: q.scoreFalse };
+      }
+    }
+    outcome = scoringEngine.scoreAssessment({ assessmentId: id, questions: questions, answers: answers, rule: rule, complexTypes: complexTypes });
     } catch (error) {
       wx.showToast({ title: error.message || '评分规则加载失败', icon: 'none' });
       return;

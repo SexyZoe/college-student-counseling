@@ -114,3 +114,108 @@
 .restore-detail { font-size: 24rpx; color: #888; line-height: 2; margin-bottom: 20rpx; }
 .restore-time { display: block; color: #aaa; }
 .restore-hint { font-size: 22rpx; color: #f4a3a8; margin-top: 10rpx; }
+/* ===== 复杂题型样式 ===== */
+
+/* 题型标签 */
+.qtype-tag {
+  display: inline-block;
+  padding: 4rpx 16rpx; border-radius: 20rpx;
+  background: #fef0f2; color: #f4a3a8;
+  font-size: 20rpx; margin-bottom: 16rpx;
+}
+
+/* ===== 多选 ===== */
+.multi-hint {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12rpx 20rpx; margin-bottom: 16rpx;
+  background: #f5f7fa; border-radius: 10rpx;
+  font-size: 22rpx; color: #888;
+}
+.multi-count { color: #f4a3a8; font-weight: 600; }
+.multi-option { }
+.option-checkbox {
+  width: 44rpx; height: 44rpx; border-radius: 8rpx;
+  border: 3rpx solid #ddd;
+  display: flex; align-items: center; justify-content: center;
+  margin-right: 20rpx; flex-shrink: 0; transition: all 0.2s;
+}
+.option-checkbox.checked {
+  border-color: #f4a3a8; background-color: #f4a3a8;
+}
+.multi-option.selected {
+  border-color: #f4a3a8; background-color: #fef5f6;
+}
+
+/* ===== 矩阵量表 ===== */
+.matrix-section {
+  background: #fff; border-radius: 16rpx; overflow: hidden;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.03);
+}
+.matrix-scroll {
+  overflow-x: auto;
+}
+.matrix-header {
+  display: flex; align-items: center;
+  background: #f5f7fa; border-bottom: 1rpx solid #e8e8e8;
+}
+.matrix-col-header {
+  flex: 1; min-width: 120rpx; text-align: center;
+  padding: 16rpx 8rpx; font-size: 20rpx; color: #888;
+  border-left: 1rpx solid #f0f0f0;
+}
+.matrix-row {
+  display: flex; align-items: center;
+}
+.matrix-row + .matrix-row { border-top: 1rpx solid #f0f0f0; }
+.matrix-row-label {
+  width: 180rpx; flex-shrink: 0;
+  padding: 16rpx 12rpx; font-size: 22rpx; color: #555;
+  line-height: 1.4;
+}
+.matrix-col-cell {
+  flex: 1; min-width: 120rpx; text-align: center;
+  padding: 16rpx 8rpx; border-left: 1rpx solid #f0f0f0;
+  display: flex; align-items: center; justify-content: center;
+}
+.matrix-col-cell.matrix-selected {
+  background: #fef5f6;
+}
+.matrix-radio {
+  width: 32rpx; height: 32rpx; border-radius: 50%;
+  border: 3rpx solid #ddd;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+}
+.matrix-radio.matrix-checked {
+  border-color: #f4a3a8; background-color: #f4a3a8;
+}
+
+/* ===== 是非题 ===== */
+.boolean-section {
+  padding: 20rpx 0;
+}
+.boolean-options {
+  display: flex; gap: 30rpx; justify-content: center;
+}
+.boolean-option {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 200rpx; height: 200rpx; border-radius: 24rpx;
+  border: 4rpx solid #e8e0d5; background: #fff;
+  transition: all 0.25s;
+}
+.boolean-option.boolean-yes {
+  border-color: #8fc8b5; background: #f0faf5;
+}
+.boolean-option.boolean-no {
+  border-color: #f4a3a8; background: #fef5f6;
+}
+.boolean-icon {
+  font-size: 56rpx; margin-bottom: 12rpx;
+}
+.boolean-option.boolean-yes .boolean-icon { color: #8fc8b5; }
+.boolean-option.boolean-no .boolean-icon { color: #f4a3a8; }
+.boolean-text {
+  font-size: 30rpx; font-weight: 600;
+}
+.boolean-option.boolean-yes .boolean-text { color: #609e85; }
+.boolean-option.boolean-no .boolean-text { color: #d07a80; }
