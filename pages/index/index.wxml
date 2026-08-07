@@ -1,22 +1,13 @@
-<!-- pages/index/index.wxml -->
+﻿<!-- pages/index/index.wxml -->
 <view class="container">
-  <!-- 隐私提示横幅（首次展示） -->
+  <!-- 隐私提示横幅 -->
   <view class="privacy-banner" wx:if="{{showPrivacy}}">
     <van-icon name="info-o" size="16px" color="#f4a3a8" />
     <text class="privacy-text">{{privacyNotice}}</text>
     <van-icon name="cross" size="14px" color="#999" bindtap="onClosePrivacy" />
   </view>
 
-  <view class="task-section" wx:if="{{isLoggedIn}}">
-    <view class="section-header"><text class="section-title">当前测评任务</text><text class="semester-text">{{currentSemester}}</text></view>
-    <view class="task-card" wx:for="{{pendingTasks}}" wx:key="id" data-task-id="{{item.id}}" data-assessment-id="{{item.assessmentId}}" bindtap="onTaskTap">
-      <view class="task-main"><text class="task-title">{{item.title}}</text><text class="task-deadline">截止：{{item.deadline}}</text></view><view class="task-action">去完成</view>
-    </view>
-    <view class="recent-result" wx:if="{{recentResult}}"><text>最近结果：{{recentResult.assessmentName}}</text><text class="recent-level">{{recentResult.level}}</text></view>
-    <view class="empty-task" wx:if="{{pendingTasks.length === 0}}">当前没有待完成任务</view>
-  </view>
-
-  <!-- 顶部问候 + 班级信息 -->
+  <!-- 顶部问候 -->
   <view class="header-section">
     <view class="greeting-area">
       <view class="greeting-left">
@@ -25,21 +16,6 @@
       </view>
       <view class="user-avatar" bindtap="{{isLoggedIn ? 'goMine' : 'goLogin'}}">
         <image class="avatar-img" src="{{isLoggedIn ? userInfo.avatarUrl : '/images/articles/article_growth.png'}}" mode="aspectFill" />
-      </view>
-    </view>
-    <!-- 班级 & 辅导员信息（已登录+有学号时显示） -->
-    <view class="class-info" wx:if="{{isLoggedIn && userInfo.studentId}}">
-      <view class="class-info-item">
-        <van-icon name="label-o" size="14px" color="#8fc8b5" />
-        <text>{{userInfo.grade}} {{userInfo.major}} {{userInfo.className}}</text>
-      </view>
-      <view class="class-info-item" wx:if="{{userInfo.counselor}}">
-        <van-icon name="friends-o" size="14px" color="#8fc1e0" />
-        <text>辅导员：{{userInfo.counselor}}</text>
-      </view>
-      <view class="class-info-item">
-        <van-icon name="orders-o" size="14px" color="#f5d79e" />
-        <text>待完成测评：{{pendingAssessmentCount}}</text>
       </view>
     </view>
   </view>
@@ -54,6 +30,95 @@
     </swiper>
   </view>
 
+  <!-- 学期 + 班级信息卡片 -->
+  <block wx:if="{{isLoggedIn && userInfo.studentId}}">
+    <view class="info-card">
+      <!-- 学期 -->
+      <view class="info-row">
+        <view class="info-icon" style="background:#8fc8b5"><van-icon name="notes-o" size="18px" color="#fff" /></view>
+        <view class="info-body">
+          <text class="info-label">当前学期</text>
+          <text class="info-value">{{currentSemester ? currentSemester.name : '未配置学期'}}</text>
+          <text class="info-extra" wx:if="{{currentSemeter}}">{{currentSemester.startDate + ' ~ ' + currentSemester.endDate + ' · ' + semesterPhaseLabel}}</text>
+        </view>
+      </view>
+      <!-- 班级 -->
+      <view class="info-row">
+        <view class="info-icon" style="background:#8fc1e0"><van-icon name="label-o" size="18px" color="#fff" /></view>
+        <view class="info-body">
+          <text class="info-label">班级信息</text>
+          <text class="info-value">{{userInfo.grade + ' · ' + userInfo.className}}</text>
+          <text class="info-extra">{{userInfo.major}}</text>
+        </view>
+      </view>
+      <!-- 辅导员 -->
+      <view class="info-row" wx:if="{{userInfo.counselor}}">
+        <view class="info-icon" style="background:#b8a9d4"><van-icon name="friends-o" size="18px" color="#fff" /></view>
+        <view class="info-body">
+          <text class="info-label">辅导员</text>
+          <text class="info-value">{{userInfo.counselor}}</text>
+          <text class="info-extra" wx:if="{{userInfo.counselorPhone}}">{{'联系电话：' + userInfo.counselorPhone}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 待完成任务 -->
+    <view class="task-section">
+      <view class="section-header">
+        <text class="section-title">待完成测评</text>
+        <text class="task-count-badge">{{pendingAssessmentCount > 0 ? pendingAssessmentCount + '项' : ''}}</text>
+      </view>
+      <view wx:if="{{pendingTasks.length > 0}}">
+        <view class="task-card" wx:for="{{pendingTasks}}" wx:key="id" bindtap="onTaskTap" data-assessment-id="{{item.assessmentId}}" data-task-id="{{item.id}}">
+          <view class="task-status-bar" style="background:{{item.status === '进行中' ? '#f4a3a8' : '#8fc8b5'}}"></view>
+          <view class="task-body">
+            <view class="task-top">
+              <text class="task-title">{{item.title}}</text>
+              <text class="task-days" wx:if="{{item.daysLeftStr}}">{{item.daysLeftStr}}</text>
+            </view>
+            <view class="task-meta">
+              <text class="task-deadline">{{'截止：' + item.deadline}}</text>
+              <text class="task-status-tag" style="color:{{item.status === '进行中' ? '#f4a3a8' : '#8fc8b5'}}">{{item.status || '待完成'}}</text>
+            </view>
+          </view>
+          <van-icon name="arrow" size="16px" color="#ccc" />
+        </view>
+      </view>
+      <view class="empty-state" wx:else>
+        <van-icon name="passed" size="40px" color="#8fc8b5" />
+        <text class="empty-text">当前没有待完成的测评任务</text>
+      </view>
+    </view>
+
+    <!-- 最近测评结果 -->
+    <view class="result-section" wx:if="{{recentResult}}" bindtap="onRecentResultTap">
+      <view class="section-header">
+        <text class="section-title">最近测评结果</text>
+        <view class="section-more">
+          <text class="more-text" wx:if="{{resultHistoryCount > 0}}" catchtap="onViewHistory">{{'共' + resultHistoryCount + '条'}}</text>
+          <van-icon name="arrow" size="14px" color="#999" />
+        </view>
+      </view>
+      <view class="result-card">
+        <view class="result-left">
+          <view class="result-name">{{recentResult.assessmentName}}</view>
+          <view class="result-date">{{recentResult.date || recentResult.createdAt}}</view>
+        </view>
+        <view class="result-right">
+          <!-- wellbeing 环形进度：用纯色圆环代替 conic-gradient -->
+          <view class="score-ring">
+            <view class="ring-progress" style="background:{{recentResultLevelColor}}"></view>
+            <view class="ring-center">
+              <text class="ring-value">{{recentResultRingPercent}}</text>
+              <text class="ring-unit">幸福指数</text>
+            </view>
+          </view>
+          <text class="result-level" style="color:{{recentResultLevelColor}}">{{recentResult.level}}</text>
+        </view>
+      </view>
+    </view>
+  </block>
+
   <!-- 快捷服务入口 -->
   <view class="quick-entry-section">
     <view class="section-title">核心服务</view>
@@ -67,10 +132,23 @@
     </view>
   </view>
 
-  <!-- 心理资讯 -->
+  <!-- 成长与价值 -->
   <view class="article-section" wx:if="{{civicsArticles.length}}">
-    <view class="section-header"><text class="section-title">成长与价值</text><view class="section-more" bindtap="onQuickEntryTap" data-path="/pages/civics/index"><text class="more-text">更多</text><van-icon name="arrow" size="14px" color="#999" /></view></view>
-    <view class="civics-mini" wx:for="{{civicsArticles}}" wx:key="id" data-id="{{item.id}}" bindtap="onCivicsTap"><view><text class="civics-mini-tag">{{item.category}}</text><text class="civics-mini-title">{{item.title}}</text><text class="civics-mini-summary">{{item.summary}}</text></view><van-icon name="arrow" size="16px" color="#bbb" /></view>
+    <view class="section-header">
+      <text class="section-title">成长与价值</text>
+      <view class="section-more" bindtap="onQuickEntryTap" data-path="/pages/civics/index">
+        <text class="more-text">更多</text>
+        <van-icon name="arrow" size="14px" color="#999" />
+      </view>
+    </view>
+    <view class="civics-mini" wx:for="{{civicsArticles}}" wx:key="id" data-id="{{item.id}}" bindtap="onCivicsTap">
+      <view>
+        <text class="civics-mini-tag">{{item.category}}</text>
+        <text class="civics-mini-title">{{item.title}}</text>
+        <text class="civics-mini-summary">{{item.summary}}</text>
+      </view>
+      <van-icon name="arrow" size="16px" color="#bbb" />
+    </view>
   </view>
 
   <!-- 心理资讯 -->
@@ -91,13 +169,12 @@
           <text class="article-summary">{{item.summary}}</text>
           <view class="article-meta">
             <van-icon name="eye-o" size="14px" color="#999" />
-            <text class="meta-text">{{item.views}} 阅读</text>
+            <text class="meta-text">{{item.views + ' 阅读'}}</text>
           </view>
         </view>
       </view>
     </view>
   </view>
 
-  <!-- 底部安全区 -->
   <view class="bottom-safe"></view>
 </view>
