@@ -1,1 +1,1 @@
-{"usingComponents":{"van-icon":"@vant/weapp/icon/index","van-search":"@vant/weapp/search/index"},"navigationBarTitleText":"常见问题"}
+﻿{"usingComponents":{"van-icon":"@vant/weapp/icon/index","van-search":"@vant/weapp/search/index","van-empty":"@vant/weapp/empty/index"},"navigationBarTitleText":"常见问题"}
