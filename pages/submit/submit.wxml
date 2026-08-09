@@ -1,17 +1,57 @@
-<view class="submit-container">
+﻿<view class="submit-container">
+  <!-- 成功引导弹窗 -->
+  <view class="success-overlay" wx:if="{{showSuccess}}">
+    <view class="success-card">
+      <view class="success-icon">✅</view>
+      <text class="success-title">投稿已提交</text>
+      <text class="success-desc">管理员审核通过后将在心理资讯中展示</text>
+      <text class="success-hint">预计1-3个工作日内完成审核</text>
+      <view class="success-btn" bindtap="onBackToList">返回心理资讯</view>
+    </view>
+  </view>
+
+  <!-- 确认提交弹窗 -->
+  <van-dialog id="confirm-dialog" show="{{showConfirm}}" title="确认提交投稿" confirm-button-text="确认提交" cancel-button-text="继续编辑" bind:confirm="onSubmit" bind:cancel="onCancelConfirm">
+    <view class="confirm-body">
+      <view class="confirm-row"><text class="confirm-label">标题：</text><text class="confirm-val">{{title}}</text></view>
+      <view class="confirm-row"><text class="confirm-label">分类：</text><text class="confirm-val">{{category}}</text></view>
+      <view class="confirm-row"><text class="confirm-label">字数：</text><text class="confirm-val">{{content.length}} 字</text></view>
+      <text class="confirm-note">提交后需等待管理员审核，审核通过后将公开展示</text>
+    </view>
+  </van-dialog>
+
+  <!-- 体裁稿表 -->
   <view class="form-card">
     <view class="form-label">文章标题</view>
-    <van-field value="{{title}}" placeholder="请输入文章标题" bind:change="onTitleInput" />
+    <van-field value="{{title}}" placeholder="请输入标题（2-50字）" maxlength="50" bind:change="onTitleInput" />
   </view>
+
   <view class="form-card">
     <view class="form-label">文章分类</view>
     <picker mode="selector" range="{{categories}}" bindchange="onCategoryChange">
       <view class="picker-display">{{category}} <van-icon name="arrow-down" size="14px" color="#999" /></view>
     </picker>
   </view>
+
   <view class="form-card">
-    <view class="form-label">文章内容</view>
+    <view class="form-label">文章内容 <text class="word-count">（{{content.length}}/2000字）</text></view>
     <van-field value="{{content}}" placeholder="请输入文章正文..." type="textarea" autosize maxlength="2000" show-word-limit bind:change="onContentInput" />
   </view>
-  <view class="submit-btn btn-primary" bindtap="onSubmit"><text class="btn-text">提交投稿</text></view>
+
+  <!-- 操作按钮 -->
+  <view class="submit-btn btn-primary" bindtap="onShowConfirm">
+    <text class="btn-text">提交投稿</text>
+  </view>
+
+  <!-- 提交历史 -->
+  <view class="form-card" wx:if="{{submissions.length > 0}}">
+    <view class="form-label">我的投稿</view>
+    <view class="submission-item" wx:for="{{submissions}}" wx:key="id">
+      <view class="sub-info">
+        <text class="sub-title">{{item.title}}</text>
+        <text class="sub-meta">{{item.category}} · {{item.createTime}}</text>
+      </view>
+      <view class="sub-status {{item.status === '待审核' ? 'status-pending' : (item.status === '已发布' ? 'status-approved' : 'status-rejected')}}">{{item.status}}</view>
+    </view>
+  </view>
 </view>

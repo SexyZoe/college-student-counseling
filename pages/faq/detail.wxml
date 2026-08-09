@@ -1,5 +1,9 @@
-<view class="faq-detail" wx:if="{{item}}">
+﻿<view class="faq-detail" wx:if="{{item}}">
   <view class="detail-header">
+    <view class="detail-back" bindtap="onBack">
+      <van-icon name="arrow-left" size="18px" color="#666" />
+      <text>返回</text>
+    </view>
     <view class="detail-cat">{{item.category}}</view>
     <text class="detail-question">{{item.question}}</text>
   </view>
