@@ -74,10 +74,41 @@
 
 如需验证多人数据闭环，另开终端执行 `AUTH_SECRET="本地随机密钥" npm run server`，再按照 [后端启动说明](server/README.md) 启用小程序后端同步。
 
+### 使用 Docker 运行后端
+
+1. 复制Compose环境变量模板：
+
+   ```bash
+   cp .env.compose.example .env
+   ```
+
+2. 将`.env`中的`AUTH_SECRET`替换为至少32个字符的本地随机值。
+3. 构建并启动：
+
+   ```bash
+   docker compose up --build -d
+   ```
+
+4. 验证服务和核心接口：
+
+   ```bash
+   curl http://127.0.0.1:8787/health
+   curl http://127.0.0.1:8787/ready
+   docker compose exec backend npm run smoke
+   ```
+
+5. 停止服务：
+
+   ```bash
+   docker compose down
+   ```
+
+普通`docker compose down`不会删除SQLite测试数据卷。只有明确需要清空虚构测试数据时才使用`docker compose down -v`。
+
 ## 项目状态
 
-- 前端演示原型：约 85%
-- 完整可上线系统：约 59%
+- 前端演示原型：约 90%
+- 完整可上线系统：约 60%
 
 本地演示数据仍使用 `wx.Storage`；启用后端后，测评闭环和人员导入使用 SQLite 持久化。正式上线仍需生产数据库、学校接口、统一认证、字段加密、通知、报表和部署运维。
 
@@ -91,6 +122,8 @@
 - [后端测评数据闭环说明](docs/后端测评数据闭环说明.md)
 - [人员数据导入与回滚说明](docs/人员数据导入与回滚说明.md)
 - [后端启动与接口说明](server/README.md)
+- [后端开发与学校对接任务清单](docs/后端开发与学校对接任务清单.md)
+- [企业级项目补全计划](docs/企业级项目补全计划.md)
 
 ## 隐私与伦理
 

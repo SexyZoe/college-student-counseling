@@ -2,6 +2,10 @@
 project.private.config.json
 node_modules/
 *.log
+.env
+.env.*
+!.env.example
+!.env.compose.example
 server/data/
 server/*.db
 server/*.db-shm

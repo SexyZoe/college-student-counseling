@@ -4,7 +4,7 @@ const { HttpError } = require("./errors")
 function createHttpApp(services, config) {
   return async function handleRequest(request, response) {
     const requestId = crypto.randomUUID()
-    setHeaders(response, requestId)
+    setHeaders(request, response, requestId, config)
     if (request.method === "OPTIONS") return send(response, 204, null)
 
     try {
@@ -12,6 +12,9 @@ function createHttpApp(services, config) {
       const path = url.pathname.replace(/\/$/, "") || "/"
       if (request.method === "GET" && path === "/health") {
         return sendOk(response, { status: "ok", service: "shuzhi-heart-harbor-server" })
+      }
+      if (request.method === "GET" && path === "/ready") {
+        return sendOk(response, services.checkReadiness())
       }
       if (request.method === "POST" && path === "/api/v1/auth/login") {
         return sendOk(response, services.login(await readJson(request, config.maxBodyBytes)))
@@ -128,12 +131,23 @@ function readJson(request, maxBytes) {
   })
 }
 
-function setHeaders(response, requestId) {
+function setHeaders(request, response, requestId, config) {
   response.setHeader("Content-Type", "application/json; charset=utf-8")
   response.setHeader("Cache-Control", "no-store")
   response.setHeader("X-Content-Type-Options", "nosniff")
+  response.setHeader("X-Frame-Options", "DENY")
+  response.setHeader("Referrer-Policy", "no-referrer")
+  response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+  response.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
   response.setHeader("X-Request-Id", requestId)
-  response.setHeader("Access-Control-Allow-Origin", "*")
+  const origin = String(request.headers.origin || "")
+  const allowedOrigins = Array.isArray(config.corsAllowedOrigins) ? config.corsAllowedOrigins : ["*"]
+  if (allowedOrigins.indexOf("*") !== -1) {
+    response.setHeader("Access-Control-Allow-Origin", "*")
+  } else if (origin && allowedOrigins.indexOf(origin) !== -1) {
+    response.setHeader("Access-Control-Allow-Origin", origin)
+    response.setHeader("Vary", "Origin")
+  }
   response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type")
   response.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
 }

@@ -14,6 +14,7 @@ AUTH_SECRET="请替换为随机长字符串" npm run server
 
 ```bash
 curl http://127.0.0.1:8787/health
+curl http://127.0.0.1:8787/ready
 ```
 
 运行全部测试：
@@ -21,6 +22,57 @@ curl http://127.0.0.1:8787/health
 ```bash
 npm test
 ```
+
+`/health`只表示HTTP进程存活；`/ready`还会访问数据库，用于判断实例能否接收业务流量。
+
+## Docker开发环境
+
+在仓库根目录执行：
+
+```bash
+cp .env.compose.example .env
+```
+
+编辑`.env`并设置至少32个字符的本地`AUTH_SECRET`，然后运行：
+
+```bash
+docker compose up --build -d
+docker compose ps
+docker compose logs -f backend
+```
+
+执行不输出令牌的核心冒烟测试：
+
+```bash
+docker compose exec backend npm run smoke
+```
+
+需要人工演练容器重建时，可先写入持久化探针，执行`docker compose down`并重新启动，再读取探针：
+
+```bash
+docker compose exec -e PROBE_MODE=write -e PROBE_ID=local-rebuild-test backend npm run persistence:probe
+docker compose down
+docker compose up -d
+docker compose exec -e PROBE_MODE=read -e PROBE_ID=local-rebuild-test backend npm run persistence:probe
+```
+
+停止容器但保留测试数据：
+
+```bash
+docker compose down
+```
+
+当前Compose安全基线包括非root用户、只读根文件系统、移除Linux capabilities、禁止权限提升、健康检查、优雅停止和独立数据卷。SQLite容器只用于开发测试，正式环境仍需迁移到学校MySQL或华为云RDS。
+
+## 生产配置要求
+
+- `NODE_ENV=production`时必须提供至少32个字符的`AUTH_SECRET`；
+- 生产环境默认不创建演示账号；只有使用虚构数据的开发/CI环境才能设置`SEED_DEMO_DATA=true`；
+- `CORS_ALLOWED_ORIGINS`使用英文逗号分隔允许的Web后台域名，生产环境默认不放行跨域来源；
+- `DATABASE_PATH`必须指向持久化卷；
+- 请求体、请求超时、请求头超时和优雅关闭时限均可通过`.env.example`中的变量配置；
+- 密钥不得写入镜像、Compose文件、Git仓库或日志；
+- 对外流量应由学校网关、WAF或反向代理提供HTTPS，应用容器无需直接保存证书。
 
 ## 让微信开发者工具连接后端
 

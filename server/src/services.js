@@ -469,7 +469,14 @@ function createServices(database, config, options) {
     requireRole:requireRole
   })
 
+  function checkReadiness() {
+    const result = database.prepare("SELECT 1 AS ready").get()
+    if (!result || result.ready !== 1) throw new Error("数据库就绪检查失败")
+    return { status:"ready", database:"ok", service:"shuzhi-heart-harbor-server" }
+  }
+
   return {
+    checkReadiness,
     login,
     authenticate,
     getCurrentSemester,

@@ -8,6 +8,8 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "smoke": "node scripts/smoke-test.js",
+    "persistence:probe": "node scripts/persistence-probe.js"
   }
 }

@@ -82,6 +82,13 @@ test("后端测评数据闭环", async function(t) {
     assert.equal(response.body.data.status, "ok")
   })
 
+  await t.test("就绪检查确认数据库可以访问", async function() {
+    const response = await api("/ready")
+    assert.equal(response.status, 200)
+    assert.equal(response.body.data.status, "ready")
+    assert.equal(response.body.data.database, "ok")
+  })
+
   await t.test("受保护接口拒绝匿名访问", async function() {
     const response = await api("/api/v1/assessment-tasks")
     assert.equal(response.status, 401)

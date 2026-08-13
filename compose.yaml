@@ -1,0 +1,39 @@
+name: shuzhi-heart-harbor
+
+services:
+  backend:
+    image: shuzhi-backend:sqlite
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    init: true
+    ports:
+      - "${BACKEND_PORT:-8787}:8787"
+    environment:
+      NODE_ENV: "${NODE_ENV:-development}"
+      HOST: "0.0.0.0"
+      PORT: "8787"
+      DATABASE_PATH: "/app/data/app.db"
+      AUTH_SECRET: "${AUTH_SECRET:?请先复制 .env.compose.example 为 .env 并设置 AUTH_SECRET}"
+      SEED_DEMO_DATA: "${SEED_DEMO_DATA:-true}"
+      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-*}"
+    volumes:
+      - backend-data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    stop_grace_period: 15s
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  backend-data:
