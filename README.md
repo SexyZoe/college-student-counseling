@@ -94,7 +94,7 @@
    ```bash
    curl http://127.0.0.1:8787/health
    curl http://127.0.0.1:8787/ready
-   docker compose exec backend npm run smoke
+   docker compose exec backend node scripts/smoke-test.js
    ```
 
 5. 停止服务：

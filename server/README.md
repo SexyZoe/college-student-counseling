@@ -4,7 +4,7 @@
 
 ## 本地启动
 
-需要 Node.js 22.13 或更高版本。当前使用 Node 内置 SQLite，启动时出现 SQLite experimental warning 不影响本地原型运行。
+本地开发需要 Node.js 22.13 或更高版本，生产容器固定使用 Node.js 24 LTS。当前使用 Node 内置 SQLite，启动时出现 SQLite experimental warning 不影响本地原型运行。
 
 ```bash
 AUTH_SECRET="请替换为随机长字符串" npm run server
@@ -44,16 +44,16 @@ docker compose logs -f backend
 执行不输出令牌的核心冒烟测试：
 
 ```bash
-docker compose exec backend npm run smoke
+docker compose exec backend node scripts/smoke-test.js
 ```
 
 需要人工演练容器重建时，可先写入持久化探针，执行`docker compose down`并重新启动，再读取探针：
 
 ```bash
-docker compose exec -e PROBE_MODE=write -e PROBE_ID=local-rebuild-test backend npm run persistence:probe
+docker compose exec -e PROBE_MODE=write -e PROBE_ID=local-rebuild-test backend node scripts/persistence-probe.js
 docker compose down
 docker compose up -d
-docker compose exec -e PROBE_MODE=read -e PROBE_ID=local-rebuild-test backend npm run persistence:probe
+docker compose exec -e PROBE_MODE=read -e PROBE_ID=local-rebuild-test backend node scripts/persistence-probe.js
 ```
 
 停止容器但保留测试数据：
@@ -62,7 +62,13 @@ docker compose exec -e PROBE_MODE=read -e PROBE_ID=local-rebuild-test backend np
 docker compose down
 ```
 
-当前Compose安全基线包括非root用户、只读根文件系统、移除Linux capabilities、禁止权限提升、健康检查、优雅停止和独立数据卷。SQLite容器只用于开发测试，正式环境仍需迁移到学校MySQL或华为云RDS。
+当前Compose安全基线包括非root用户、只读根文件系统、移除Linux capabilities、禁止权限提升、健康检查、优雅停止和独立数据卷。生产镜像采用多阶段构建，运行阶段不包含npm、npx和Corepack。SQLite容器只用于开发测试，正式环境仍需迁移到学校MySQL或华为云RDS。
+
+本地复查生产镜像高危漏洞：
+
+```bash
+docker scout cves --only-severity critical,high --format packages local://shuzhi-backend:sqlite
+```
 
 ## 生产配置要求
 

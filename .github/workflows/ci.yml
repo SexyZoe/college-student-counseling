@@ -23,7 +23,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: server/package-lock.json
 
@@ -62,14 +62,15 @@ jobs:
         run: |
           test "$(docker exec shuzhi-ci id -u)" != "0"
           test "$(docker inspect shuzhi-ci --format '{{.HostConfig.ReadonlyRootfs}}')" = "true"
-          docker exec shuzhi-ci npm run smoke
+          ! docker exec shuzhi-ci sh -c 'command -v npm'
+          docker exec shuzhi-ci node scripts/smoke-test.js
 
       - name: Verify data survives container replacement
         run: |
           docker exec \
             -e PROBE_MODE=write \
             -e PROBE_ID=ci-container-replacement-probe \
-            shuzhi-ci npm run persistence:probe
+            shuzhi-ci node scripts/persistence-probe.js
           docker rm -f shuzhi-ci
           docker run -d --name shuzhi-ci \
             -p 18787:8787 \
@@ -88,7 +89,7 @@ jobs:
           docker exec \
             -e PROBE_MODE=read \
             -e PROBE_ID=ci-container-replacement-probe \
-            shuzhi-ci npm run persistence:probe
+            shuzhi-ci node scripts/persistence-probe.js
 
       - name: Show container logs on failure
         if: failure()
