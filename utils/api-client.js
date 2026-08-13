@@ -57,6 +57,7 @@ function request(options) {
           return
         }
         const error = body.error || {}
+        if (response.statusCode === 401 && options.auth !== false) clearSession()
         reject(new BackendError(response.statusCode, error.code, error.message, error.details))
       },
       fail: function(error) {
@@ -74,6 +75,16 @@ function login(credentials) {
       user: result.user
     })
     return result
+  })
+}
+
+function logout() {
+  return request({ path:"/api/v1/auth/logout", method:"POST", data:{} }).then(function(result) {
+    clearSession()
+    return result
+  }, function(error) {
+    clearSession()
+    throw error
   })
 }
 
@@ -149,6 +160,41 @@ function rollbackImportBatch(batchId) {
   return request({ path: "/api/v1/admin/import-batches/" + encodeURIComponent(batchId) + "/rollback", method:"POST", data:{}, timeout:15000 })
 }
 
+function getAdminAssessmentTasks() {
+  return request({ path:"/api/v1/admin/assessment-tasks" })
+}
+
+function createAdminAssessmentTask(data) {
+  return request({ path:"/api/v1/admin/assessment-tasks", method:"POST", data:data })
+}
+
+function transitionAdminAssessmentTask(taskId, status) {
+  return request({ path:"/api/v1/admin/assessment-tasks/" + encodeURIComponent(taskId) + "/status", method:"PATCH", data:{ status:status } })
+}
+
+function getMyCounselorContent() {
+  return request({ path:"/api/v1/counselor/content-items/mine" })
+}
+
+function submitCounselorContent(data) {
+  return request({ path:"/api/v1/counselor/content-items", method:"POST", data:data })
+}
+
+function getAdminContent(type, status) {
+  const query = []
+  if (type) query.push("type=" + encodeURIComponent(type))
+  if (status) query.push("status=" + encodeURIComponent(status))
+  return request({ path:"/api/v1/admin/content-items" + (query.length ? "?" + query.join("&") : "") })
+}
+
+function reviewAdminContent(contentId, status, reviewNote) {
+  return request({ path:"/api/v1/admin/content-items/" + encodeURIComponent(contentId) + "/review", method:"PATCH", data:{ status:status, reviewNote:reviewNote || "" } })
+}
+
+function getAdminAuditLogs(limit) {
+  return request({ path:"/api/v1/admin/audit-logs?limit=" + encodeURIComponent(limit || 100) })
+}
+
 module.exports = {
   API_BASE_URL_KEY: API_BASE_URL_KEY,
   API_ENABLED_KEY: API_ENABLED_KEY,
@@ -161,6 +207,7 @@ module.exports = {
   clearSession: clearSession,
   request: request,
   login: login,
+  logout: logout,
   submitAssessmentResult: submitAssessmentResult,
   getAssessmentTasks: getAssessmentTasks,
   getMyResults: getMyResults,
@@ -178,5 +225,13 @@ module.exports = {
   getImportBatch: getImportBatch,
   previewPersonnelImport: previewPersonnelImport,
   confirmImportBatch: confirmImportBatch,
-  rollbackImportBatch: rollbackImportBatch
+  rollbackImportBatch: rollbackImportBatch,
+  getAdminAssessmentTasks: getAdminAssessmentTasks,
+  createAdminAssessmentTask: createAdminAssessmentTask,
+  transitionAdminAssessmentTask: transitionAdminAssessmentTask,
+  getMyCounselorContent: getMyCounselorContent,
+  submitCounselorContent: submitCounselorContent,
+  getAdminContent: getAdminContent,
+  reviewAdminContent: reviewAdminContent,
+  getAdminAuditLogs: getAdminAuditLogs
 }

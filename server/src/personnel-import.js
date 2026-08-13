@@ -1,6 +1,6 @@
 const crypto = require("node:crypto")
 const { HttpError } = require("./errors")
-const { createPasswordRecord, normalizeAccountId } = require("./security")
+const { createPasswordRecordAsync, normalizeAccountId } = require("./security")
 
 const HEADER_ALIASES = {
   type: ["类型", "type", "recordtype"],
@@ -112,9 +112,9 @@ function validateFormat(row) {
   return errors
 }
 
-function passwordRecord(row) {
+async function passwordRecord(row) {
   if (!row.password) return null
-  return createPasswordRecord(row.password)
+  return createPasswordRecordAsync(row.password)
 }
 
 function fileHash(csvText) {

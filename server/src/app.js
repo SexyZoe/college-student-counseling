@@ -1,99 +1,169 @@
 const crypto = require("node:crypto")
 const { HttpError } = require("./errors")
+const { createRateLimiter } = require("./rate-limit")
+const { createMetrics } = require("./metrics")
+const { createLogger } = require("./logger")
 
-function createHttpApp(services, config) {
+function createHttpApp(services, config, options) {
+  const limiter = options && options.rateLimiter ? options.rateLimiter : createRateLimiter()
+  const metrics = options && options.metrics ? options.metrics : createMetrics()
+  const logger = options && options.logger ? options.logger : createLogger(config.logLevel || "info")
   return async function handleRequest(request, response) {
     const requestId = crypto.randomUUID()
+    const startedAt = process.hrtime.bigint()
+    const requestUrl = new URL(request.url, "http://localhost")
+    const route = routeLabel(requestUrl.pathname)
+    const clientIp = clientAddress(request, config.trustProxy)
+    response.on("finish", function() {
+      const durationSeconds = Number(process.hrtime.bigint() - startedAt) / 1e9
+      metrics.observe(request.method, route, response.statusCode, durationSeconds)
+      logger.info("http_request_completed", {
+        requestId:requestId,
+        method:request.method,
+        route:route,
+        status:response.statusCode,
+        durationMs:Math.round(durationSeconds * 1000),
+        clientIp:clientIp
+      })
+    })
     setHeaders(request, response, requestId, config)
     if (request.method === "OPTIONS") return send(response, 204, null)
 
     try {
-      const url = new URL(request.url, "http://localhost")
+      enforceRateLimit(limiter, response, "general:" + clientIp, config.generalRateLimitPerMinute || 300)
+      const url = requestUrl
       const path = url.pathname.replace(/\/$/, "") || "/"
       if (request.method === "GET" && path === "/health") {
         return sendOk(response, { status: "ok", service: "shuzhi-heart-harbor-server" })
       }
       if (request.method === "GET" && path === "/ready") {
-        return sendOk(response, services.checkReadiness())
+        return sendOk(response, await services.checkReadiness())
+      }
+      if (request.method === "GET" && path === "/metrics") {
+        requireMetricsToken(request, config.metricsToken)
+        return sendMetrics(response, metrics.render())
       }
       if (request.method === "POST" && path === "/api/v1/auth/login") {
-        return sendOk(response, services.login(await readJson(request, config.maxBodyBytes)))
+        enforceRateLimit(limiter, response, "login:" + clientIp, config.loginRateLimitPerMinute || 30)
+        return sendOk(response, await services.login(await readJson(request, config.maxBodyBytes)))
+      }
+      if (request.method === "POST" && path === "/api/v1/auth/logout") {
+        return sendOk(response, await services.logout(readBearerToken(request)))
       }
 
-      const user = services.authenticate(readBearerToken(request))
+      const user = await services.authenticate(readBearerToken(request))
       if (request.method === "GET" && path === "/api/v1/semesters/current") {
-        return sendOk(response, services.getCurrentSemester())
+        return sendOk(response, await services.getCurrentSemester())
       }
       if (request.method === "GET" && path === "/api/v1/assessment-tasks") {
-        return sendOk(response, services.listAssessmentTasks(user))
+        return sendOk(response, await services.listAssessmentTasks(user))
       }
       if (request.method === "POST" && path === "/api/v1/assessment-results") {
-        return sendOk(response, services.submitAssessmentResult(user, await readJson(request, config.maxBodyBytes)), 201)
+        return sendOk(response, await services.submitAssessmentResult(user, await readJson(request, config.maxBodyBytes)), 201)
       }
       if (request.method === "GET" && path === "/api/v1/assessment-results/me") {
-        return sendOk(response, services.getMyResults(user))
+        return sendOk(response, await services.getMyResults(user))
+      }
+      if (request.method === "GET" && path === "/api/v1/content-items") {
+        return sendOk(response, await services.listPublishedContent(user, url.searchParams.get("type") || ""))
       }
       if (request.method === "GET" && path === "/api/v1/counselor/classes") {
-        return sendOk(response, services.listCounselorClasses(user))
+        return sendOk(response, await services.listCounselorClasses(user))
       }
       const classMatch = path.match(/^\/api\/v1\/counselor\/classes\/([^/]+)\/summary$/)
       if (request.method === "GET" && classMatch) {
-        return sendOk(response, services.classSummary(user, decodeURIComponent(classMatch[1])))
+        return sendOk(response, await services.classSummary(user, decodeURIComponent(classMatch[1])))
       }
       if (request.method === "GET" && path === "/api/v1/counselor/risk-events") {
-        return sendOk(response, services.listRiskEvents(user, url.searchParams.get("status") || ""))
+        return sendOk(response, await services.listRiskEvents(user, url.searchParams.get("status") || ""))
       }
       const riskMatch = path.match(/^\/api\/v1\/counselor\/risk-events\/(\d+)$/)
       if (request.method === "PATCH" && riskMatch) {
-        return sendOk(response, services.updateRiskEvent(user, Number(riskMatch[1]), await readJson(request, config.maxBodyBytes)))
+        return sendOk(response, await services.updateRiskEvent(user, Number(riskMatch[1]), await readJson(request, config.maxBodyBytes)))
       }
       const studentMatch = path.match(/^\/api\/v1\/counselor\/students\/([^/]+)\/summary$/)
       if (request.method === "GET" && studentMatch) {
-        return sendOk(response, services.getStudentSupportSummary(user, decodeURIComponent(studentMatch[1])))
+        return sendOk(response, await services.getStudentSupportSummary(user, decodeURIComponent(studentMatch[1])))
+      }
+      if (request.method === "GET" && path === "/api/v1/counselor/content-items/mine") {
+        return sendOk(response, await services.listMyCounselorContent(user))
+      }
+      if (request.method === "POST" && path === "/api/v1/counselor/content-items") {
+        return sendOk(response, await services.submitCounselorContent(user, await readJson(request, config.maxBodyBytes)), 201)
       }
       if (request.method === "GET" && path === "/api/v1/admin/semesters") {
-        return sendOk(response, services.listSemesters(user))
+        return sendOk(response, await services.listSemesters(user))
       }
       if (request.method === "POST" && path === "/api/v1/admin/semesters") {
-        return sendOk(response, services.createSemester(user, await readJson(request, config.maxBodyBytes)), 201)
+        return sendOk(response, await services.createSemester(user, await readJson(request, config.maxBodyBytes)), 201)
       }
       const currentSemesterMatch = path.match(/^\/api\/v1\/admin\/semesters\/([^/]+)\/current$/)
       if (request.method === "PATCH" && currentSemesterMatch) {
-        return sendOk(response, services.setCurrentSemester(user, decodeURIComponent(currentSemesterMatch[1])))
+        return sendOk(response, await services.setCurrentSemester(user, decodeURIComponent(currentSemesterMatch[1])))
       }
       if (request.method === "POST" && path === "/api/v1/admin/counselor-assignments") {
-        return sendOk(response, services.createCounselorAssignment(user, await readJson(request, config.maxBodyBytes)), 201)
+        return sendOk(response, await services.createCounselorAssignment(user, await readJson(request, config.maxBodyBytes)), 201)
       }
       if (request.method === "GET" && path === "/api/v1/admin/students") {
-        return sendOk(response, services.listAdminStudents(user))
+        return sendOk(response, await services.listAdminStudents(user))
       }
       if (request.method === "GET" && path === "/api/v1/admin/counselor-assignments") {
-        return sendOk(response, services.listAdminAssignments(user, url.searchParams.get("semesterId") || ""))
+        return sendOk(response, await services.listAdminAssignments(user, url.searchParams.get("semesterId") || ""))
+      }
+      if (request.method === "GET" && path === "/api/v1/admin/assessment-tasks") {
+        return sendOk(response, await services.listAdminAssessmentTasks(user))
+      }
+      if (request.method === "POST" && path === "/api/v1/admin/assessment-tasks") {
+        return sendOk(response, await services.createAdminAssessmentTask(user, await readJson(request, config.maxBodyBytes)), 201)
+      }
+      const taskStatusMatch = path.match(/^\/api\/v1\/admin\/assessment-tasks\/([^/]+)\/status$/)
+      if (request.method === "PATCH" && taskStatusMatch) {
+        return sendOk(response, await services.transitionAdminAssessmentTask(user, decodeURIComponent(taskStatusMatch[1]), await readJson(request, config.maxBodyBytes)))
+      }
+      if (request.method === "GET" && path === "/api/v1/admin/content-items") {
+        return sendOk(response, await services.listAdminContent(user, {
+          type:url.searchParams.get("type") || "",
+          status:url.searchParams.get("status") || ""
+        }))
+      }
+      const contentReviewMatch = path.match(/^\/api\/v1\/admin\/content-items\/(\d+)\/review$/)
+      if (request.method === "PATCH" && contentReviewMatch) {
+        return sendOk(response, await services.reviewAdminContent(user, Number(contentReviewMatch[1]), await readJson(request, config.maxBodyBytes)))
+      }
+      if (request.method === "GET" && path === "/api/v1/admin/audit-logs") {
+        return sendOk(response, await services.listAdminAuditLogs(user, url.searchParams.get("limit")))
       }
       if (request.method === "GET" && path === "/api/v1/admin/import-batches") {
-        return sendOk(response, services.listImportBatches(user))
+        return sendOk(response, await services.listImportBatches(user))
       }
       if (request.method === "POST" && path === "/api/v1/admin/import-batches/preview") {
-        return sendOk(response, services.previewPersonnelImport(user, await readJson(request, config.maxBodyBytes)), 201)
+        return sendOk(response, await services.previewPersonnelImport(user, await readJson(request, config.maxBodyBytes)), 201)
       }
       const importBatchMatch = path.match(/^\/api\/v1\/admin\/import-batches\/(\d+)$/)
       if (request.method === "GET" && importBatchMatch) {
-        return sendOk(response, services.getImportBatch(user, Number(importBatchMatch[1])))
+        return sendOk(response, await services.getImportBatch(user, Number(importBatchMatch[1])))
       }
       const confirmImportMatch = path.match(/^\/api\/v1\/admin\/import-batches\/(\d+)\/confirm$/)
       if (request.method === "POST" && confirmImportMatch) {
-        return sendOk(response, services.confirmImportBatch(user, Number(confirmImportMatch[1])))
+        return sendOk(response, await services.confirmImportBatch(user, Number(confirmImportMatch[1])))
       }
       const rollbackImportMatch = path.match(/^\/api\/v1\/admin\/import-batches\/(\d+)\/rollback$/)
       if (request.method === "POST" && rollbackImportMatch) {
-        return sendOk(response, services.rollbackImportBatch(user, Number(rollbackImportMatch[1])))
+        return sendOk(response, await services.rollbackImportBatch(user, Number(rollbackImportMatch[1])))
       }
       throw new HttpError(404, "NOT_FOUND", "接口不存在")
     } catch (error) {
       const status = error instanceof HttpError ? error.status : 500
       const code = error instanceof HttpError ? error.code : "INTERNAL_ERROR"
       const message = error instanceof HttpError ? error.message : "服务器处理请求失败"
-      if (!(error instanceof HttpError)) console.error("[" + requestId + "]", error)
+      if (status === 429 && error.details && error.details.retryAfterSeconds) {
+        response.setHeader("Retry-After", String(error.details.retryAfterSeconds))
+      }
+      if (!(error instanceof HttpError)) logger.error("http_request_failed", {
+        requestId:requestId,
+        errorName:error && error.name,
+        errorMessage:error && error.message
+      })
       return send(response, status, {
         ok: false,
         error: { code: code, message: message, details: error.details || null },
@@ -101,6 +171,45 @@ function createHttpApp(services, config) {
       })
     }
   }
+}
+
+function clientAddress(request, trustProxy) {
+  if (trustProxy) {
+    const forwarded = String(request.headers["x-forwarded-for"] || "").split(",")[0].trim()
+    if (forwarded) return forwarded.slice(0, 80)
+  }
+  return String(request.socket && request.socket.remoteAddress || "unknown").slice(0, 80)
+}
+
+function routeLabel(pathname) {
+  return String(pathname || "/")
+    .replace(/\/$/, "")
+    .replace(/\/(classes|risk-events|students|semesters|import-batches)\/[^/]+/g, "/$1/:id") || "/"
+}
+
+function enforceRateLimit(limiter, response, key, limit) {
+  const result = limiter.check(key, limit, 60 * 1000)
+  response.setHeader("X-RateLimit-Limit", String(result.limit))
+  response.setHeader("X-RateLimit-Remaining", String(result.remaining))
+  if (!result.allowed) {
+    throw new HttpError(429, "RATE_LIMITED", "请求过于频繁，请稍后重试", { retryAfterSeconds:result.retryAfterSeconds })
+  }
+}
+
+function requireMetricsToken(request, expected) {
+  if (!expected) return
+  const supplied = String(request.headers.authorization || "").replace(/^Bearer\s+/i, "")
+  const actualBuffer = Buffer.from(supplied)
+  const expectedBuffer = Buffer.from(expected)
+  if (actualBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(actualBuffer, expectedBuffer)) {
+    throw new HttpError(401, "METRICS_AUTH_REQUIRED", "监控指标需要授权")
+  }
+}
+
+function sendMetrics(response, body) {
+  response.statusCode = 200
+  response.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+  response.end(body)
 }
 
 function readBearerToken(request) {

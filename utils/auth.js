@@ -197,6 +197,15 @@ function clearSession(reason) {
   if (user.accountId) appendAudit("退出登录", { role: user.role, accountId: user.accountId, reason: reason || "用户主动退出" })
 }
 
+function logout(reason) {
+  let remoteLogout
+  try { remoteLogout = require("./api-client").logout() }
+  catch (error) { remoteLogout = Promise.reject(error) }
+  return remoteLogout.catch(function() { return null }).then(function() {
+    clearSession(reason || "用户主动退出")
+  })
+}
+
 function readSession(currentTime) {
   const timestamp = typeof currentTime === "number" ? currentTime : nowTime()
   const session = wx.getStorageSync(AUTH_SESSION_KEY)
@@ -280,5 +289,6 @@ module.exports = {
   restoreSession,
   routeToRoleHome,
   requireRole,
-  clearSession
+  clearSession,
+  logout
 }

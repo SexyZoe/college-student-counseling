@@ -1,14 +1,19 @@
 const test = require("node:test")
 const assert = require("node:assert/strict")
 const http = require("node:http")
+const crypto = require("node:crypto")
 const { openDatabase, seedDemoData } = require("../src/database")
 const { createServices } = require("../src/services")
 const { createHttpApp } = require("../src/app")
 
 const config = {
   authSecret: "automated-test-secret",
+  dataEncryptionKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  dataEncryptionKeyId: "test-primary",
   tokenTtlSeconds: 3600,
-  maxBodyBytes: 1024 * 1024
+  maxBodyBytes: 1024 * 1024,
+  metricsToken: "metrics-test-token",
+  logLevel: "error"
 }
 
 let database
@@ -17,7 +22,7 @@ let baseUrl
 
 test.before(async function() {
   database = openDatabase(":memory:")
-  seedDemoData(database)
+  await seedDemoData(database)
   const services = createServices(database, config)
   server = http.createServer(createHttpApp(services, config))
   await new Promise(function(resolve) { server.listen(0, "127.0.0.1", resolve) })
@@ -89,6 +94,16 @@ test("后端测评数据闭环", async function(t) {
     assert.equal(response.body.data.database, "ok")
   })
 
+  await t.test("监控指标默认需要独立令牌", async function() {
+    let response = await api("/metrics")
+    assert.equal(response.status, 401)
+    response = await fetch(baseUrl + "/metrics", { headers:{ authorization:"Bearer metrics-test-token" } })
+    assert.equal(response.status, 200)
+    const body = await response.text()
+    assert.match(body, /shuzhi_http_requests_total/)
+    assert.match(response.headers.get("content-type"), /text\/plain/)
+  })
+
   await t.test("受保护接口拒绝匿名访问", async function() {
     const response = await api("/api/v1/assessment-tasks")
     assert.equal(response.status, 401)
@@ -105,6 +120,9 @@ test("后端测评数据闭环", async function(t) {
     assert.equal(response.body.error.code, "INVALID_CREDENTIALS")
   })
 
+  const legacySalt = "legacy-login-upgrade-salt"
+  const legacyHash = crypto.pbkdf2Sync("123456", legacySalt, 120000, 32, "sha256").toString("base64url")
+  database.prepare("UPDATE users SET password_hash = ?, password_salt = ? WHERE account_id = '2024001'").run(legacyHash, legacySalt)
   const student = await login("student", "2024001")
   const counselor = await login("counselor", "T001")
   const admin = await login("admin", "admin")
@@ -114,6 +132,7 @@ test("后端测评数据闭环", async function(t) {
     assert.deepEqual(counselor.user.classIds, ["AI2401", "CS2401"])
     assert.equal(admin.user.role, "admin")
     assert.equal(Object.prototype.hasOwnProperty.call(student.user, "passwordHash"), false)
+    assert.match(database.prepare("SELECT password_hash FROM users WHERE account_id = '2024001'").get().password_hash, /^pbkdf2-sha256\$600000\$/)
   })
 
   await t.test("学生只能获取当前班级的固定版本任务", async function() {
@@ -166,6 +185,7 @@ test("后端测评数据闭环", async function(t) {
     assert.equal(response.body.data.idempotent, false)
     resultId = response.body.data.result.id
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM risk_events WHERE result_id = ?").get(resultId).count, 1)
+    assert.match(database.prepare("SELECT answer_snapshot_json FROM assessment_results WHERE id = ?").get(resultId).answer_snapshot_json, /^enc:v1:test-primary:/)
   })
 
   await t.test("重复 submissionId 幂等返回且不重复写入", async function() {
@@ -218,6 +238,7 @@ test("后端测评数据闭环", async function(t) {
     assert.equal(response.status, 200)
     assert.equal(response.body.data.status, "跟进中")
     assert.equal(response.body.data.followupNote, "已电话联系学生")
+    assert.match(database.prepare("SELECT followup_note FROM risk_events WHERE id = ?").get(event.id).followup_note, /^enc:v1:test-primary:/)
   })
 
   await t.test("学生支持摘要不返回原始答案", async function() {
@@ -225,6 +246,84 @@ test("后端测评数据闭环", async function(t) {
     assert.equal(response.status, 200)
     assert.equal(response.body.data.results.length, 1)
     assert.equal(Object.prototype.hasOwnProperty.call(response.body.data.results[0], "answerSnapshot"), false)
+  })
+
+  await t.test("管理员创建并发布固定版本测评任务", async function() {
+    let response = await api("/api/v1/admin/assessment-tasks", {
+      method:"POST",
+      headers:authHeaders(admin.token),
+      body:JSON.stringify({
+        id:"task-api-test",
+        title:"API创建的班级普测",
+        assessmentId:1,
+        semesterId:"2026-1",
+        deadline:"2026-12-10",
+        targetClassId:"CS2401"
+      })
+    })
+    assert.equal(response.status, 201)
+    assert.equal(response.body.data.status, "草稿")
+    assert.equal(response.body.data.scoringVersion, "2.0.0")
+
+    response = await api("/api/v1/admin/assessment-tasks/task-api-test/status", {
+      method:"PATCH", headers:authHeaders(admin.token), body:JSON.stringify({ status:"进行中" })
+    })
+    assert.equal(response.status, 200)
+    assert.equal(response.body.data.status, "进行中")
+
+    response = await api("/api/v1/admin/assessment-tasks/task-api-test/status", {
+      method:"PATCH", headers:authHeaders(admin.token), body:JSON.stringify({ status:"草稿" })
+    })
+    assert.equal(response.status, 409)
+    assert.equal(response.body.error.code, "TASK_TRANSITION_DENIED")
+
+    response = await api("/api/v1/assessment-tasks", { headers:authHeaders(student.token) })
+    assert.equal(response.body.data.some(function(item) { return item.id === "task-api-test" }), true)
+  })
+
+  await t.test("辅导员投稿由管理员审核后才对学生发布", async function() {
+    let response = await api("/api/v1/counselor/content-items", {
+      method:"POST",
+      headers:authHeaders(counselor.token),
+      body:JSON.stringify({ type:"civics", title:"理性表达与网络素养", category:"网络素养", summary:"保持理性与尊重", content:"在网络交流中尊重事实、尊重他人，并在情绪激动时暂停表达。" })
+    })
+    assert.equal(response.status, 201)
+    assert.equal(response.body.data.status, "待审核")
+    const contentId = response.body.data.id
+
+    response = await api("/api/v1/counselor/content-items", {
+      method:"POST", headers:authHeaders(student.token), body:JSON.stringify({ title:"越权投稿", content:"不应成功" })
+    })
+    assert.equal(response.status, 403)
+
+    response = await api("/api/v1/content-items?type=civics", { headers:authHeaders(student.token) })
+    assert.equal(response.body.data.length, 0)
+
+    response = await api("/api/v1/admin/content-items?status=" + encodeURIComponent("待审核"), { headers:authHeaders(admin.token) })
+    assert.equal(response.body.data.some(function(item) { return item.id === contentId }), true)
+
+    response = await api("/api/v1/admin/content-items/" + contentId + "/review", {
+      method:"PATCH", headers:authHeaders(admin.token), body:JSON.stringify({ status:"已发布", reviewNote:"内容审核通过" })
+    })
+    assert.equal(response.status, 200)
+    assert.equal(response.body.data.reviewerName, "系统管理员")
+
+    response = await api("/api/v1/content-items?type=civics", { headers:authHeaders(student.token) })
+    assert.equal(response.body.data.length, 1)
+    assert.equal(response.body.data[0].title, "理性表达与网络素养")
+
+    response = await api("/api/v1/admin/content-items/" + contentId + "/review", {
+      method:"PATCH", headers:authHeaders(admin.token), body:JSON.stringify({ status:"已退回", reviewNote:"重复审核" })
+    })
+    assert.equal(response.status, 409)
+  })
+
+  await t.test("只有管理员可以查询结构化审计记录", async function() {
+    let response = await api("/api/v1/admin/audit-logs?limit=20", { headers:authHeaders(student.token) })
+    assert.equal(response.status, 403)
+    response = await api("/api/v1/admin/audit-logs?limit=20", { headers:authHeaders(admin.token) })
+    assert.equal(response.status, 200)
+    assert.equal(response.body.data.some(function(item) { return item.action === "审核发布内容" }), true)
   })
 
   await t.test("管理员切换学期不会修改历史结果归属", async function() {
@@ -277,5 +376,14 @@ test("后端测评数据闭环", async function(t) {
     }
     assert.equal(response.status, 429)
     assert.equal(response.body.error.code, "ACCOUNT_LOCKED")
+  })
+
+  await t.test("退出登录后服务端立即撤销令牌", async function() {
+    let response = await api("/api/v1/auth/logout", { method:"POST", headers:authHeaders(student.token), body:"{}" })
+    assert.equal(response.status, 200)
+    assert.equal(response.body.data.revoked, true)
+    response = await api("/api/v1/assessment-results/me", { headers:authHeaders(student.token) })
+    assert.equal(response.status, 401)
+    assert.equal(response.body.error.code, "INVALID_TOKEN")
   })
 })

@@ -49,7 +49,20 @@ async function main() {
     assert.ok(String(response.body.data.token || "").length > 20)
   }
 
-  console.log("Docker 冒烟测试通过：健康、就绪、匿名拒绝、错误密码和三类角色登录均正常")
+  const disposable = await login("student", "2024002")
+  const logout = await request("/api/v1/auth/logout", {
+    method:"POST",
+    headers:{ authorization:"Bearer " + disposable.body.data.token, "content-type":"application/json" },
+    body:"{}"
+  })
+  assert.equal(logout.status, 200)
+  const revoked = await request("/api/v1/assessment-results/me", {
+    headers:{ authorization:"Bearer " + disposable.body.data.token }
+  })
+  assert.equal(revoked.status, 401)
+  assert.equal(revoked.body.error.code, "INVALID_TOKEN")
+
+  console.log("Docker 冒烟测试通过：健康、就绪、匿名拒绝、错误密码、三类角色登录和令牌撤销均正常")
 }
 
 main().catch(function(error) {

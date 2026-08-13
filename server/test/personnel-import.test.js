@@ -5,14 +5,14 @@ const { openDatabase, seedDemoData } = require("../src/database")
 const { createServices } = require("../src/services")
 const { createHttpApp } = require("../src/app")
 
-const config = { authSecret:"personnel-import-test-secret", tokenTtlSeconds:3600, maxBodyBytes:1024 * 1024 }
+const config = { authSecret:"personnel-import-test-secret", tokenTtlSeconds:3600, maxBodyBytes:1024 * 1024, logLevel:"error" }
 let database
 let server
 let baseUrl
 
 test.before(async function() {
   database = openDatabase(":memory:")
-  seedDemoData(database)
+  await seedDemoData(database)
   server = http.createServer(createHttpApp(createServices(database, config), config))
   await new Promise(function(resolve) { server.listen(0, "127.0.0.1", resolve) })
   baseUrl = "http://127.0.0.1:" + server.address().port

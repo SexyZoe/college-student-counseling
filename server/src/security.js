@@ -1,6 +1,8 @@
 const crypto = require("node:crypto")
 
-const PASSWORD_ITERATIONS = 120000
+const LEGACY_PASSWORD_ITERATIONS = 120000
+const PASSWORD_ITERATIONS = 600000
+const PASSWORD_PREFIX = "pbkdf2-sha256"
 
 function encode(value) {
   return Buffer.from(value).toString("base64url")
@@ -14,19 +16,60 @@ function normalizeAccountId(value) {
   return String(value || "").trim().toLowerCase()
 }
 
-function hashPassword(password, salt) {
-  return crypto.pbkdf2Sync(String(password), salt, PASSWORD_ITERATIONS, 32, "sha256").toString("base64url")
+function hashPassword(password, salt, iterations) {
+  return crypto.pbkdf2Sync(String(password), salt, iterations || PASSWORD_ITERATIONS, 32, "sha256").toString("base64url")
+}
+
+function hashPasswordAsync(password, salt, iterations) {
+  return new Promise(function(resolve, reject) {
+    crypto.pbkdf2(String(password), salt, iterations || PASSWORD_ITERATIONS, 32, "sha256", function(error, value) {
+      if (error) reject(error)
+      else resolve(value.toString("base64url"))
+    })
+  })
 }
 
 function createPasswordRecord(password, saltValue) {
   const salt = saltValue || crypto.randomBytes(16).toString("base64url")
-  return { salt: salt, hash: hashPassword(password, salt) }
+  return { salt: salt, hash: [PASSWORD_PREFIX, PASSWORD_ITERATIONS, hashPassword(password, salt, PASSWORD_ITERATIONS)].join("$") }
+}
+
+async function createPasswordRecordAsync(password, saltValue) {
+  const salt = saltValue || crypto.randomBytes(16).toString("base64url")
+  return { salt:salt, hash:[PASSWORD_PREFIX, PASSWORD_ITERATIONS, await hashPasswordAsync(password, salt, PASSWORD_ITERATIONS)].join("$") }
 }
 
 function verifyPassword(password, salt, expectedHash) {
-  const actual = Buffer.from(hashPassword(password, salt))
-  const expected = Buffer.from(String(expectedHash || ""))
+  const stored = String(expectedHash || "")
+  const parts = stored.split("$")
+  const versioned = parts.length === 3 && parts[0] === PASSWORD_PREFIX && /^\d+$/.test(parts[1])
+  const iterations = versioned ? Number(parts[1]) : LEGACY_PASSWORD_ITERATIONS
+  const digest = versioned ? parts[2] : stored
+  if (!Number.isInteger(iterations) || iterations < 100000 || iterations > 2000000) return false
+  const actual = Buffer.from(hashPassword(password, salt, iterations))
+  const expected = Buffer.from(digest)
   return actual.length === expected.length && crypto.timingSafeEqual(actual, expected)
+}
+
+async function verifyPasswordAsync(password, salt, expectedHash) {
+  const stored = String(expectedHash || "")
+  const parts = stored.split("$")
+  const versioned = parts.length === 3 && parts[0] === PASSWORD_PREFIX && /^\d+$/.test(parts[1])
+  const iterations = versioned ? Number(parts[1]) : LEGACY_PASSWORD_ITERATIONS
+  const digest = versioned ? parts[2] : stored
+  if (!Number.isInteger(iterations) || iterations < 100000 || iterations > 2000000) return false
+  const actual = Buffer.from(await hashPasswordAsync(password, salt, iterations))
+  const expected = Buffer.from(digest)
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected)
+}
+
+function passwordNeedsUpgrade(expectedHash) {
+  const parts = String(expectedHash || "").split("$")
+  return parts.length !== 3 || parts[0] !== PASSWORD_PREFIX || Number(parts[1]) < PASSWORD_ITERATIONS
+}
+
+function tokenIdHash(jti) {
+  return crypto.createHash("sha256").update(String(jti || "")).digest("hex")
 }
 
 function signToken(payload, secret) {
@@ -67,7 +110,12 @@ function verifyToken(token, options) {
 module.exports = {
   normalizeAccountId,
   createPasswordRecord,
+  createPasswordRecordAsync,
   verifyPassword,
+  verifyPasswordAsync,
+  passwordNeedsUpgrade,
   issueToken,
-  verifyToken
+  verifyToken,
+  tokenIdHash,
+  PASSWORD_ITERATIONS
 }
