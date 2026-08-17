@@ -24,7 +24,9 @@ Page({
     loading: false,
     loginError: "",
     bindError: "",
-    verifiedAccount: null
+    verifiedAccount: null,
+    bindAvatarUrl: "/images/articles/article_growth.png",
+    bindNickName: ""
   },
 
   onLoad() {
@@ -89,22 +91,39 @@ Page({
 
     const account = result.account
     if (account.role === "student") {
-      this.setData({ loading: false, step: "bind", verifiedAccount: account, bindError: "" })
+      this.setData({
+        loading: false,
+        step: "bind",
+        verifiedAccount: account,
+        bindError: "",
+        bindAvatarUrl: "/images/articles/article_growth.png",
+        bindNickName: ""
+      })
       return
     }
     this.finishLogin(account)
   },
 
-  onBindWechat() {
+  onChooseAvatar(event) {
+    const avatarUrl = event.detail.avatarUrl
+    if (avatarUrl) this.setData({ bindAvatarUrl: avatarUrl, bindError: "" })
+  },
+
+  onNickNameInput(event) {
+    this.setData({ bindNickName: event.detail.value, bindError: "" })
+  },
+
+  confirmWechatBind() {
     if (this.data.loading) return
+    const nickName = String(this.data.bindNickName || "").trim()
+    if (!nickName) {
+      this.setData({ bindError: "请填写或选择微信昵称" })
+      return
+    }
     this.setData({ loading: true, bindError: "" })
-    wx.getUserProfile({
-      desc: "用于绑定微信身份与已验证的校内学生账号",
-      success: result => this.finishStudentLogin(result.userInfo),
-      fail: () => this.setData({
-        loading: false,
-        bindError: "未获得微信资料授权。你可以重试，或选择暂不绑定进入演示。"
-      })
+    this.finishStudentLogin({
+      nickName,
+      avatarUrl: this.data.bindAvatarUrl || "/images/articles/article_growth.png"
     })
   },
 
@@ -150,6 +169,8 @@ Page({
       loading: false,
       password: "",
       verifiedAccount: null,
+      bindAvatarUrl: "/images/articles/article_growth.png",
+      bindNickName: "",
       bindError: ""
     })
   }

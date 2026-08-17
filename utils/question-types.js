@@ -1,4 +1,4 @@
-﻿// utils/question-types.js
+// utils/question-types.js
 // 复杂题型定义与随机化工具
 
 // 题型常量

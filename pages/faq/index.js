@@ -1,4 +1,4 @@
-﻿// pages/faq/index.js
+// pages/faq/index.js
 Page({
   data: {
     searchKeyword: "",

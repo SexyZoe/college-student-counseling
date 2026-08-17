@@ -1,4 +1,4 @@
-﻿const SCORING_VERSION = "2.0.0"
+const SCORING_VERSION = "2.0.0"
 const QUESTIONNAIRE_VERSION = "1.0.0"
 
 // 当前阈值用于产品原型和流程联调，不构成临床诊断标准；上线前必须由心理专业人员审定并形成新版本。

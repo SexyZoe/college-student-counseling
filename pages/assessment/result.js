@@ -1,4 +1,4 @@
-﻿// pages/assessment/result.js
+// pages/assessment/result.js
 var resultsData = {"sas":{"name":"情绪压力量表(SAS)","ranges":[{"min":20,"max":35,"level":"压力适度","levelColor":"#8fc8b5","levelDesc":"你的情绪压力处于适度范围，情绪状态良好。","key":"ok"},{"min":36,"max":49,"level":"压力偏高","levelColor":"#f5d79e","levelDesc":"存在压力偏高倾向，建议关注自我调节。","key":"slight"},{"min":50,"max":59,"level":"压力较高","levelColor":"#f7b7a0","levelDesc":"压力水平偏高，建议尝试放松训练并关注变化。","key":"moderate"},{"min":60,"max":80,"level":"压力过高","levelColor":"#f4a3a8","levelDesc":"压力水平较高，建议寻求专业心理帮助。","key":"high"}],"analysis":{"ok":"测评结果显示你的压力水平处于正常范围。你的情绪状态较为平稳，能够较好地应对日常生活中的各种事件。建议继续保持现有的生活习惯和社交节奏，适当关注自身情绪变化即可。","slight":"你的压力水平略高于正常范围，表现为在某些情境下可能会感到紧张和担忧。这在大学生群体中较为常见，通常与学业压力和生活变化有关。建议你可以通过规律运动、深呼吸练习和正念冥想来调节。","moderate":"你的压力量表得分处于中等偏高水平。你可能在日常生活中有多处感受到情绪紧张，且这些情绪已经开始影响到你的睡眠、食欲或社交。建议你积极进行放松训练，并考虑预约一次心理咨询。","high":"测评结果显示你的压力水平较高。你可能正在经历持续的不安、紧张和担忧，甚至在无明显压力源时也会感到紧张。这已经对你的日常生活造成了显著影响。强烈建议你尽快寻求专业心理咨询师的帮助。"},"suggestions":{"ok":["保持规律的作息和每周150分钟以上的运动","维持现有的社交支持网络","每天抽5分钟进行深呼吸练习"],"slight":["学习腹式呼吸法，每天早晚各练习5分钟","减少咖啡因和糖分摄入","写情绪日记记录压力触发因素","尝试使用冥想小程序每天10分钟"],"moderate":["预约一次校内心理咨询","练习渐进式肌肉放松法","每天安排30分钟的有氧运动","暂时减少学业负荷，优先保证睡眠"],"high":["尽快预约专业心理咨询","向信任的老师或辅导员说明情况","避免独自长时间封闭自己","如影响进食睡眠请同时就医"]}}};
 
 if (!resultsData.sds) {
@@ -77,6 +77,21 @@ Page({
       }
     }
     if (!level && ranges.length) { level = ranges[0].level; levelColor = ranges[0].levelColor; levelDesc = ranges[0].levelDesc; levelKey = ranges[0].key || ""; }
+    var storedLevel = storedResult && (storedResult.level || storedResult.riskLevel);
+    var levelColors = { "正常": "#8fc8b5", "关注": "#f5d79e", "较高风险": "#f4a3a8", "紧急风险": "#e06070" };
+    var levelDescriptions = {
+      "正常": "当前评估未发现明显风险，建议保持规律作息和适度运动。",
+      "关注": "部分维度需要关注，建议结合自评结果调整生活习惯。",
+      "较高风险": "系统提示需要人工复核，请配合有权限的辅导员或专业人员进一步评估。",
+      "紧急风险": "系统提示需要优先关注，请尽快联系可信任的人或学校心理中心。"
+    };
+    var levelKeys = { "正常": "ok", "关注": "slight", "较高风险": "moderate", "紧急风险": "high" };
+    if (storedLevel && levelColors[storedLevel]) {
+      level = storedLevel;
+      levelColor = levelColors[storedLevel];
+      levelDesc = levelDescriptions[storedLevel];
+      levelKey = levelKeys[storedLevel] || "";
+    }
     var analysis = resultData.analysis && resultData.analysis[levelKey] ? resultData.analysis[levelKey] : (resultData.analysis && resultData.analysis[level]) ? resultData.analysis[level] : "";
     if (!analysis) { analysis = resultData.analysis && resultData.analysis.ok ? resultData.analysis.ok : "请参考测评结果。"; }
     var suggestions = (resultData.suggestions && resultData.suggestions[levelKey]) || (resultData.suggestions && resultData.suggestions[level]) || [];
@@ -110,7 +125,7 @@ Page({
       score: score, total: maxScore, percentage: percentage, stdScore: stdScore,
       level: level, levelColor: levelColor, levelDesc: levelDesc,
       analysis: analysis, suggestions: suggestions,
-      assessmentName: resultData.name, assessmentId: id,
+      assessmentName: storedResult ? storedResult.assessmentName : resultData.name, assessmentId: id,
       riskLevel: storedResult ? storedResult.riskLevel : this.mapRiskLevel(level),
       triggeredRules: storedResult ? (storedResult.triggeredRules || []) : [],
       dimensions: dimensions,
@@ -215,7 +230,7 @@ Page({
       var ctx = canvas.getContext("2d");
       var width = res[0].width;
       var height = res[0].height;
-      var dpr = wx.getSystemInfoSync().pixelRatio;
+      var dpr = wx.getWindowInfo().pixelRatio || 1;
       canvas.width = width * dpr;
       canvas.height = height * dpr;
       ctx.scale(dpr, dpr);

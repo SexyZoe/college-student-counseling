@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "文章详情",
   "usingComponents": {
-    "van-icon": "@vant/weapp/icon/index"
+    "van-icon": "@vant/weapp/icon/index",
+    "van-divider": "@vant/weapp/divider/index"
   }
 }

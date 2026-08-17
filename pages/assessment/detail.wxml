@@ -1,4 +1,4 @@
-﻿<!-- 知情同意弹窗 -->
+<!-- 知情同意弹窗 -->
 <van-dialog id="consent-dialog" show="{{!consentGiven && !showRestoreModal}}" show-cancel-button="{{false}}" confirm-button-text="开始测评" bind:confirm="onConsentAgree" close-on-click-overlay="{{false}}">
   <view class="consent-body">
     <view class="consent-icon">🔒</view>

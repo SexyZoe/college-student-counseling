@@ -1,4 +1,4 @@
-﻿.result-container { min-height: 100vh; background: #faf7f2; padding-bottom: 40rpx; }
+.result-container { min-height: 100vh; background: #faf7f2; padding-bottom: 40rpx; }
 
 /* 头部 */
 .result-header {
