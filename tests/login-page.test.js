@@ -88,4 +88,15 @@ test("学生验证后完成可跳过的微信绑定并进入学生首页", () =>
   assert.strictEqual(calls.switchTab[0].url, "/pages/index/index")
 })
 
+test("学生填写微信昵称后可完成绑定", () => {
+  const page = createPage()
+  page.setData({ role: "student", accountId: "2024001", password: "123456", agreed: true })
+  page.onLogin()
+  page.onNickNameInput({ detail: { value: "微信昵称" } })
+  page.confirmWechatBind()
+  assert.strictEqual(storage.userInfo.wechatBound, true)
+  assert.strictEqual(storage.userInfo.nickName, "微信昵称")
+  assert.strictEqual(calls.switchTab[0].url, "/pages/index/index")
+})
+
 console.log("\n登录页面测试全部通过")

@@ -230,7 +230,7 @@ Page({
       var ctx = canvas.getContext("2d");
       var width = res[0].width;
       var height = res[0].height;
-      var dpr = wx.getSystemInfoSync().pixelRatio;
+      var dpr = wx.getWindowInfo().pixelRatio || 1;
       canvas.width = width * dpr;
       canvas.height = height * dpr;
       ctx.scale(dpr, dpr);

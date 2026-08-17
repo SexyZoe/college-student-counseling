@@ -54,9 +54,19 @@
     </view>
     <view class="bind-info"><text class="bind-hint">微信绑定仅用于识别当前账号。本演示版本不会向服务器上传资料；正式版本需要由后端安全换取会话。</text></view>
     <view class="error-msg" wx:if="{{bindError}}" role="alert">{{bindError}}</view>
-    <view class="wechat-btn {{loading ? 'loading' : ''}}" bindtap="onBindWechat">
+    <view class="profile-bind">
+      <button class="avatar-picker" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
+        <image class="bind-avatar" src="{{bindAvatarUrl}}" mode="aspectFill" />
+        <text class="bind-avatar-hint">选择头像</text>
+      </button>
+      <view class="nickname-field">
+        <text class="nickname-label">微信昵称</text>
+        <input class="nickname-input" type="nickname" placeholder="请输入或选择微信昵称" value="{{bindNickName}}" bindinput="onNickNameInput" />
+      </view>
+    </view>
+    <view class="wechat-btn {{loading ? 'loading' : ''}}" bindtap="confirmWechatBind">
       <van-icon name="wechat" size="20px" color="#ffffff" />
-      <text>{{loading ? '绑定中...' : '微信一键绑定'}}</text>
+      <text>{{loading ? '绑定中...' : '完成绑定'}}</text>
     </view>
     <view class="skip-section" bindtap="onSkipBind"><text class="skip-text">暂不绑定，进入演示</text></view>
     <view class="back-section" bindtap="goBack"><van-icon name="arrow-left" size="14px" color="#999" /><text class="back-text-small">返回重新登录</text></view>
