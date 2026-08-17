@@ -1,1 +1,1 @@
-{"usingComponents":{"van-field":"@vant/weapp/field/index"},"navigationBarTitleText":"投稿"}
+{"usingComponents":{"van-field":"@vant/weapp/field/index","van-icon":"@vant/weapp/icon/index"},"navigationBarTitleText":"投稿"}

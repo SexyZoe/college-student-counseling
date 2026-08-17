@@ -1,4 +1,4 @@
-﻿<!-- pages/index/index.wxml -->
+<!-- pages/index/index.wxml -->
 <view class="container">
   <!-- 隐私提示横幅 -->
   <view class="privacy-banner" wx:if="{{showPrivacy}}">
@@ -39,7 +39,7 @@
         <view class="info-body">
           <text class="info-label">当前学期</text>
           <text class="info-value">{{currentSemester ? currentSemester.name : '未配置学期'}}</text>
-          <text class="info-extra" wx:if="{{currentSemeter}}">{{currentSemester.startDate + ' ~ ' + currentSemester.endDate + ' · ' + semesterPhaseLabel}}</text>
+          <text class="info-extra" wx:if="{{currentSemester}}">{{currentSemester.startDate + ' ~ ' + currentSemester.endDate + ' · ' + semesterPhaseLabel}}</text>
         </view>
       </view>
       <!-- 班级 -->
