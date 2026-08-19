@@ -1,4 +1,4 @@
-﻿// pages/index/index.js
+// pages/index/index.js
 const auth = require("../../utils/auth")
 const semesterService = require("../../utils/semester")
 
