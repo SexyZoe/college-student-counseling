@@ -1,0 +1,12 @@
+**
+!.dockerignore
+!server/
+!server/Dockerfile
+!server/package.json
+!server/package-lock.json
+!server/src/
+!server/src/**
+!server/scripts/
+!server/scripts/**
+!utils/
+!utils/scoring-engine.js

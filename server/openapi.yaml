@@ -1,0 +1,573 @@
+openapi: 3.1.0
+info:
+  title: 数智心港湾后端 API
+  version: 0.2.0
+  description: |
+    大学生心理健康支持小程序的后端接口。测评结果仅用于教育支持和人工复核，
+    不构成医疗诊断。除健康检查外，业务接口使用 Bearer 令牌鉴权。
+servers:
+  - url: http://127.0.0.1:8787
+    description: 本地开发
+tags:
+  - name: Operations
+  - name: Authentication
+  - name: Student
+  - name: Counselor
+  - name: Admin
+paths:
+  /health:
+    get:
+      tags: [Operations]
+      summary: 进程存活检查
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+  /ready:
+    get:
+      tags: [Operations]
+      summary: 服务与数据库就绪检查
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+  /metrics:
+    get:
+      tags: [Operations]
+      summary: Prometheus 指标
+      description: 配置 METRICS_TOKEN 后使用独立 Bearer 令牌，不使用用户登录令牌。
+      security: [{ metricsBearer: [] }]
+      responses:
+        "200":
+          description: Prometheus 文本格式
+          content:
+            text/plain:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/auth/login:
+    post:
+      tags: [Authentication]
+      summary: 三类角色登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/LoginResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/auth/logout:
+    post:
+      tags: [Authentication]
+      summary: 撤销当前服务端会话
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/semesters/current:
+    get:
+      tags: [Student]
+      summary: 查询当前学期
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/assessment-tasks:
+    get:
+      tags: [Student]
+      summary: 查询当前学生班级的测评任务
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/assessment-results:
+    post:
+      tags: [Student]
+      summary: 幂等提交测评结果并由服务器复算
+      description: submissionId 全局唯一；服务器忽略客户端身份并重新评分。原始答案以 AES-256-GCM 加密存储。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AssessmentSubmission" }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/assessment-results/me:
+    get:
+      tags: [Student]
+      summary: 查询当前学生结果摘要
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/content-items:
+    get:
+      tags: [Student]
+      summary: 查询已发布的科普或课程思政内容
+      parameters:
+        - in: query
+          name: type
+          schema: { type: string, enum: [civics, psychoeducation] }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/counselor/classes:
+    get:
+      tags: [Counselor]
+      summary: 查询辅导员当前学期授权班级
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/counselor/classes/{classId}/summary:
+    get:
+      tags: [Counselor]
+      summary: 查询授权班级的必要摘要
+      parameters:
+        - $ref: "#/components/parameters/ClassId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/counselor/risk-events:
+    get:
+      tags: [Counselor]
+      summary: 查询授权范围内风险事件
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [待确认, 跟进中, 已关闭] }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/counselor/risk-events/{eventId}:
+    patch:
+      tags: [Counselor]
+      summary: 更新风险跟进状态和记录
+      description: 跟进记录以 AES-256-GCM 加密存储。
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string, enum: [待确认, 跟进中, 已关闭] }
+                followupNote: { type: string, maxLength: 1000 }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/counselor/students/{studentId}/summary:
+    get:
+      tags: [Counselor]
+      summary: 查询授权学生支持摘要
+      description: 不返回原始答题快照。
+      parameters:
+        - in: path
+          name: studentId
+          required: true
+          schema: { type: string, maxLength: 80 }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/counselor/content-items:
+    post:
+      tags: [Counselor]
+      summary: 提交课程思政或心理科普内容审核
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContentSubmission" }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/counselor/content-items/mine:
+    get:
+      tags: [Counselor]
+      summary: 查询当前辅导员的投稿和审核状态
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/assessment-tasks:
+    get:
+      tags: [Admin]
+      summary: 查询全部测评任务
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Admin]
+      summary: 创建绑定固定评分版本的测评任务草稿
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, assessmentId, semesterId, deadline]
+              properties:
+                id: { type: string, maxLength: 128 }
+                title: { type: string, maxLength: 100 }
+                assessmentId: { type: integer, minimum: 1, maximum: 8 }
+                semesterId: { type: string }
+                deadline: { type: string, format: date }
+                targetClassId: { type: string }
+                questionnaireVersion: { type: string }
+                scoringVersion: { type: string }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/admin/assessment-tasks/{taskId}/status:
+    patch:
+      tags: [Admin]
+      summary: 按受控状态机发布或结束任务
+      parameters:
+        - in: path
+          name: taskId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [未开始, 进行中, 已结束] }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/admin/content-items:
+    get:
+      tags: [Admin]
+      summary: 按类型和状态查询待审核内容
+      parameters:
+        - in: query
+          name: type
+          schema: { type: string, enum: [civics, psychoeducation] }
+        - in: query
+          name: status
+          schema: { type: string, enum: [待审核, 已发布, 已退回] }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/content-items/{contentId}/review:
+    patch:
+      tags: [Admin]
+      summary: 发布或退回辅导员投稿
+      parameters:
+        - in: path
+          name: contentId
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [已发布, 已退回] }
+                reviewNote: { type: string, maxLength: 500 }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/admin/audit-logs:
+    get:
+      tags: [Admin]
+      summary: 查询最近结构化业务审计记录
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/admin/semesters:
+    get:
+      tags: [Admin]
+      summary: 查询全部学期
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Admin]
+      summary: 创建学期
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SemesterInput" }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/admin/semesters/{semesterId}/current:
+    patch:
+      tags: [Admin]
+      summary: 原子切换当前学期并保留历史数据
+      parameters:
+        - $ref: "#/components/parameters/SemesterId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/admin/counselor-assignments:
+    get:
+      tags: [Admin]
+      summary: 查询辅导员班级分配
+      parameters:
+        - in: query
+          name: semesterId
+          schema: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    post:
+      tags: [Admin]
+      summary: 按学期分配辅导员班级权限
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [staffId, classId, semesterId]
+              properties:
+                staffId: { type: string }
+                classId: { type: string }
+                semesterId: { type: string }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/admin/students:
+    get:
+      tags: [Admin]
+      summary: 查询学生基础信息
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+  /api/v1/admin/import-batches:
+    get:
+      tags: [Admin]
+      summary: 查询最近人员导入批次
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+  /api/v1/admin/import-batches/preview:
+    post:
+      tags: [Admin]
+      summary: 预检人员 CSV 并生成差异计划
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientBatchId, fileName, csvText]
+              properties:
+                clientBatchId: { type: string, minLength: 6, maxLength: 128 }
+                fileName: { type: string, maxLength: 255 }
+                csvText: { type: string }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/admin/import-batches/{batchId}:
+    get:
+      tags: [Admin]
+      summary: 查询单个导入批次
+      parameters:
+        - $ref: "#/components/parameters/BatchId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/admin/import-batches/{batchId}/confirm:
+    post:
+      tags: [Admin]
+      summary: 单事务确认人员导入
+      parameters:
+        - $ref: "#/components/parameters/BatchId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/admin/import-batches/{batchId}/rollback:
+    post:
+      tags: [Admin]
+      summary: 根据变更快照整批回滚
+      parameters:
+        - $ref: "#/components/parameters/BatchId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+    metricsBearer: { type: http, scheme: bearer }
+  parameters:
+    ClassId:
+      in: path
+      name: classId
+      required: true
+      schema: { type: string, maxLength: 64 }
+    SemesterId:
+      in: path
+      name: semesterId
+      required: true
+      schema: { type: string, maxLength: 64 }
+    BatchId:
+      in: path
+      name: batchId
+      required: true
+      schema: { type: integer, minimum: 1 }
+  schemas:
+    SuccessEnvelope:
+      type: object
+      required: [ok, data]
+      properties:
+        ok: { type: boolean, const: true }
+        data: {}
+    ErrorEnvelope:
+      type: object
+      required: [ok, error, requestId]
+      properties:
+        ok: { type: boolean, const: false }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+        requestId: { type: string, format: uuid }
+    LoginRequest:
+      type: object
+      required: [role, accountId, password]
+      properties:
+        role: { type: string, enum: [student, counselor, admin] }
+        accountId: { type: string, maxLength: 160 }
+        password: { type: string, format: password }
+    LoginResult:
+      type: object
+      required: [token, expiresIn, user]
+      properties:
+        token: { type: string, writeOnly: true }
+        expiresIn: { type: integer }
+        user:
+          type: object
+          properties:
+            id: { type: string }
+            role: { type: string, enum: [student, counselor, admin] }
+            accountId: { type: string }
+            displayName: { type: string }
+            studentId: { type: string }
+            staffId: { type: string }
+            classId: { type: string }
+    SemesterInput:
+      type: object
+      required: [name, startDate, endDate]
+      properties:
+        id: { type: string, maxLength: 64 }
+        name: { type: string, maxLength: 160 }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+    AssessmentSubmission:
+      type: object
+      required: [submissionId, assessmentId, score, total, normalizedRiskScore, stdScore, riskLevel, questionnaireVersion, scoringVersion, questionnaireSnapshot, answerSnapshot]
+      properties:
+        submissionId: { type: string, minLength: 6, maxLength: 128 }
+        taskId: { type: string }
+        assessmentId: { type: integer, minimum: 1, maximum: 8 }
+        assessmentName: { type: string, maxLength: 100 }
+        score: { type: number }
+        total: { type: number }
+        normalizedRiskScore: { type: number, minimum: 0, maximum: 100 }
+        stdScore: { type: number, minimum: 0, maximum: 100 }
+        riskLevel: { type: string, enum: [正常, 关注, 较高风险, 紧急风险] }
+        questionnaireVersion: { type: string }
+        scoringVersion: { type: string }
+        questionnaireSnapshot: {}
+        answerSnapshot:
+          type: array
+          items:
+            type: object
+            required: [questionId, selectedIndex]
+            properties:
+              questionId: { type: integer }
+              selectedIndex: { type: integer, minimum: 0, maximum: 3 }
+        createdAt: { type: string, format: date-time }
+    ContentSubmission:
+      type: object
+      required: [type, title, content]
+      properties:
+        type: { type: string, enum: [civics, psychoeducation] }
+        title: { type: string, maxLength: 160 }
+        category: { type: string, maxLength: 80 }
+        summary: { type: string, maxLength: 500 }
+        content: { type: string, maxLength: 20000 }
+  responses:
+    Success:
+      description: 操作成功
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/SuccessEnvelope" }
+    BadRequest:
+      description: 请求格式错误
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Unauthorized:
+      description: 未登录、令牌失效或监控令牌错误
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Forbidden:
+      description: 角色或数据范围越权
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Conflict:
+      description: 当前状态不允许操作或幂等编号冲突
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    ValidationError:
+      description: 业务字段或评分版本校验失败
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    RateLimited:
+      description: 请求超过限额，响应包含 Retry-After
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+security:
+  - bearerAuth: []

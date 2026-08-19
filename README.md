@@ -40,7 +40,7 @@
 
 ### 后端测评数据闭环
 
-- Node.js + SQLite 本地后端，可持久化账号、学期、任务、结果、风险事件和审计日志
+- Node.js 后端同时支持 SQLite 开发模式与 MySQL 8.4 运行模式，可持久化账号、学期、任务、结果、风险事件和审计日志
 - 学生结果幂等提交、离线队列和网络恢复重试
 - 服务器按固定规则重新评分，拒绝伪造身份、篡改分数或版本不一致的提交
 - 辅导员按学期和班级授权实时查询必要摘要，不返回学生原始答案
@@ -74,12 +74,52 @@
 
 如需验证多人数据闭环，另开终端执行 `AUTH_SECRET="本地随机密钥" npm run server`，再按照 [后端启动说明](server/README.md) 启用小程序后端同步。
 
+### 使用 Docker 运行后端
+
+1. 复制Compose环境变量模板：
+
+   ```bash
+   cp .env.compose.example .env
+   ```
+
+2. 将`.env`中的`AUTH_SECRET`替换为至少32个字符的本地随机值。
+   建议同时用`openssl rand -hex 32`生成`DATA_ENCRYPTION_KEY`，不要与登录密钥相同。
+3. 构建并启动：
+
+   ```bash
+   docker compose up --build -d
+   ```
+
+4. 验证服务和核心接口：
+
+   ```bash
+   curl http://127.0.0.1:8787/health
+   curl http://127.0.0.1:8787/ready
+   docker compose exec backend node scripts/smoke-test.js
+   ```
+
+5. 停止服务：
+
+   ```bash
+   docker compose down
+   ```
+
+普通`docker compose down`不会删除SQLite测试数据卷。只有明确需要清空虚构测试数据时才使用`docker compose down -v`。
+
+如需验证与正式部署拓扑接近的 MySQL 运行模式：
+
+```bash
+docker compose --profile mysql-runtime up --build -d backend-mysql
+docker compose exec backend-mysql node scripts/smoke-test.js
+docker compose exec backend-mysql node scripts/runtime-contract-test.js
+```
+
 ## 项目状态
 
-- 前端演示原型：约 85%
-- 完整可上线系统：约 59%
+- 前端演示原型：约 90%
+- 完整可上线系统：约 68%
 
-本地演示数据仍使用 `wx.Storage`；启用后端后，测评闭环和人员导入使用 SQLite 持久化。正式上线仍需生产数据库、学校接口、统一认证、字段加密、通知、报表和部署运维。
+本地演示数据仍使用 `wx.Storage`；启用后端后可选择 SQLite 或 MySQL 持久化，MySQL 连接池和主要业务契约已通过真实 MySQL 8.4 容器验收。正式上线仍需学校提供数据库/TLS、学校接口、统一认证、通知规则、报表口径、域名与部署运维环境。
 
 详细资料：
 
@@ -91,6 +131,12 @@
 - [后端测评数据闭环说明](docs/后端测评数据闭环说明.md)
 - [人员数据导入与回滚说明](docs/人员数据导入与回滚说明.md)
 - [后端启动与接口说明](server/README.md)
+- [OpenAPI接口定义](server/openapi.yaml)
+- [生产部署与运维手册](docs/生产部署与运维手册.md)
+- [本地容器压力测试报告](docs/压力测试报告.md)
+- [学校与专业审核待办清单](docs/学校与专业审核待办清单.md)
+- [后端开发与学校对接任务清单](docs/后端开发与学校对接任务清单.md)
+- [企业级项目补全计划](docs/企业级项目补全计划.md)
 
 ## 隐私与伦理
 

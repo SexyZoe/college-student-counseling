@@ -41,5 +41,5 @@ Page({
   goClass(e) { wx.navigateTo({ url: "/pages/counselor/class-detail?id=" + e.currentTarget.dataset.id }) },
   goRisks() { wx.navigateTo({ url: "/pages/counselor/risks" }) },
   goContent() { wx.navigateTo({ url: "/pages/counselor/content" }) },
-  logout() { auth.clearSession("辅导员主动退出"); wx.reLaunch({ url: "/pages/login/login" }) }
+  logout() { auth.logout("辅导员主动退出").then(() => wx.reLaunch({ url: "/pages/login/login" })) }
 })

@@ -1,0 +1,223 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm --prefix server ci
+
+      - name: Audit backend tooling dependencies
+        run: npm --prefix server audit --audit-level=high
+
+      - name: Run all automated tests
+        run: npm test
+
+      - name: Validate OpenAPI document
+        run: ruby -e 'require "yaml"; d=YAML.load_file("server/openapi.yaml"); abort("invalid OpenAPI") unless d["openapi"] == "3.1.0" && d["paths"].is_a?(Hash)'
+
+      - name: Build backend image
+        run: docker build -f server/Dockerfile -t shuzhi-backend:ci .
+
+      - name: Start container
+        run: |
+          docker volume create shuzhi-ci-data
+          docker run -d --name shuzhi-ci \
+            -p 18787:8787 \
+            -e NODE_ENV=test \
+            -e AUTH_SECRET=ci-0123456789abcdef0123456789abcdef \
+            -e DATA_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+            -e SEED_DEMO_DATA=true \
+            -e GENERAL_RATE_LIMIT_PER_MINUTE=10000 \
+            -e LOGIN_RATE_LIMIT_PER_MINUTE=1000 \
+            -v shuzhi-ci-data:/app/data \
+            --init --read-only --tmpfs /tmp:size=64m,mode=1777 \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            shuzhi-backend:ci
+
+      - name: Wait for readiness
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18787/ready >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+
+      - name: Verify runtime security and core APIs
+        run: |
+          test "$(docker exec shuzhi-ci id -u)" != "0"
+          test "$(docker inspect shuzhi-ci --format '{{.HostConfig.ReadonlyRootfs}}')" = "true"
+          ! docker exec shuzhi-ci sh -c 'command -v npm'
+          docker exec shuzhi-ci node scripts/smoke-test.js
+          docker exec \
+            -e BASE_URL=http://127.0.0.1:8787 \
+            -e LOAD_PROFILE=health \
+            -e TOTAL_REQUESTS=500 \
+            -e CONCURRENCY=50 \
+            -e MAX_P95_MS=1000 \
+            shuzhi-ci node scripts/load-test.js
+
+      - name: Verify data survives container replacement
+        run: |
+          docker exec \
+            -e PROBE_MODE=write \
+            -e PROBE_ID=ci-container-replacement-probe \
+            shuzhi-ci node scripts/persistence-probe.js
+          docker rm -f shuzhi-ci
+          docker run -d --name shuzhi-ci \
+            -p 18787:8787 \
+            -e NODE_ENV=test \
+            -e AUTH_SECRET=ci-0123456789abcdef0123456789abcdef \
+            -e DATA_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+            -e SEED_DEMO_DATA=true \
+            -e GENERAL_RATE_LIMIT_PER_MINUTE=10000 \
+            -e LOGIN_RATE_LIMIT_PER_MINUTE=1000 \
+            -v shuzhi-ci-data:/app/data \
+            --init --read-only --tmpfs /tmp:size=64m,mode=1777 \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            shuzhi-backend:ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18787/ready >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec \
+            -e PROBE_MODE=read \
+            -e PROBE_ID=ci-container-replacement-probe \
+            shuzhi-ci node scripts/persistence-probe.js
+
+      - name: Verify encrypted backup and restore
+        run: |
+          docker volume create shuzhi-ci-backups
+          docker run --rm --user node \
+            -e DATABASE_PATH=/app/data/app.db \
+            -e BACKUP_DIRECTORY=/app/backups \
+            -e BACKUP_ENCRYPTION_KEY=abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd \
+            -e BACKUP_ENCRYPTION_KEY_ID=ci-backup \
+            -v shuzhi-ci-data:/app/data:ro \
+            -v shuzhi-ci-backups:/app/backups \
+            shuzhi-backend:ci node scripts/sqlite-backup.js
+          docker run --rm --user node \
+            -e BACKUP_ENCRYPTION_KEY=abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd \
+            -e BACKUP_ENCRYPTION_KEY_ID=ci-backup \
+            -v shuzhi-ci-backups:/app/backups \
+            shuzhi-backend:ci sh -c \
+            'BACKUP_FILE=$(find /app/backups -maxdepth 1 -name "*.db.enc" | head -1); export BACKUP_FILE; node scripts/sqlite-restore-verify.js'
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker logs shuzhi-ci || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f shuzhi-ci 2>/dev/null || true
+          docker volume rm shuzhi-ci-data 2>/dev/null || true
+          docker volume rm shuzhi-ci-backups 2>/dev/null || true
+
+  mysql-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: shuzhi
+          MYSQL_USER: shuzhi_app
+          MYSQL_PASSWORD: ci-mysql-app-password
+          MYSQL_ROOT_PASSWORD: ci-mysql-root-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-mysql-root-password --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+          --health-start-period=30s
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install migration dependencies
+        run: npm --prefix server ci --ignore-scripts
+
+      - name: Apply and verify MySQL migrations
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_DATABASE: shuzhi
+          MYSQL_USER: shuzhi_app
+          MYSQL_PASSWORD: ci-mysql-app-password
+        run: |
+          npm --prefix server run db:mysql:migrate
+          npm --prefix server run db:mysql:status
+          npm --prefix server run db:mysql:migrate
+          npm --prefix server run db:mysql:smoke
+
+      - name: Run business contract against MySQL runtime
+        env:
+          NODE_ENV: test
+          HOST: 127.0.0.1
+          PORT: 18788
+          DATABASE_ENGINE: mysql
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_DATABASE: shuzhi
+          MYSQL_USER: shuzhi_app
+          MYSQL_PASSWORD: ci-mysql-app-password
+          MYSQL_CONNECTION_LIMIT: 20
+          AUTH_SECRET: ci-0123456789abcdef0123456789abcdef
+          DATA_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          SEED_DEMO_DATA: true
+          GENERAL_RATE_LIMIT_PER_MINUTE: 10000
+          LOGIN_RATE_LIMIT_PER_MINUTE: 1000
+          BASE_URL: http://127.0.0.1:18788
+        run: |
+          npm --prefix server start >mysql-runtime.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18788/ready >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:18788/ready >/dev/null
+          npm --prefix server run contract:test
+
+      - name: Show MySQL runtime log on failure
+        if: failure()
+        run: cat mysql-runtime.log 2>/dev/null || true

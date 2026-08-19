@@ -1,7 +1,16 @@
 const crypto = require("node:crypto")
 const { HttpError } = require("./errors")
 const { inTransaction } = require("./database")
-const { normalizeAccountId, verifyPassword, issueToken, verifyToken } = require("./security")
+const {
+  normalizeAccountId,
+  createPasswordRecordAsync,
+  verifyPasswordAsync,
+  passwordNeedsUpgrade,
+  issueToken,
+  verifyToken,
+  tokenIdHash
+} = require("./security")
+const { createDataProtector } = require("./data-protection")
 const { createPersonnelImportServices } = require("./personnel-import-service")
 const scoringEngine = require("../../utils/scoring-engine")
 
@@ -9,24 +18,33 @@ const ROLES = ["student", "counselor", "admin"]
 const RISK_LEVELS = ["正常", "关注", "较高风险", "紧急风险"]
 const RISK_SEVERITY = { "正常": 0, "关注": 1, "较高风险": 2, "紧急风险": 3 }
 const RISK_STATUSES = ["待确认", "跟进中", "已关闭"]
+const CONTENT_TYPES = ["civics", "psychoeducation"]
+const CONTENT_STATUSES = ["待审核", "已发布", "已退回"]
+const TASK_TRANSITIONS = {
+  "草稿":["未开始", "进行中"],
+  "未开始":["进行中", "已结束"],
+  "进行中":["已结束"],
+  "已结束":[]
+}
 const QUESTION_COUNTS = { 1:20, 2:20, 3:15, 4:15, 5:12, 6:10, 7:10, 8:12 }
 
 function createServices(database, config, options) {
   const now = options && options.now ? options.now : function() { return Date.now() }
+  const dataProtector = createDataProtector(config.dataEncryptionKey, config.dataEncryptionKeyId)
 
   function nowIso() {
     return new Date(now()).toISOString()
   }
 
-  function audit(actorId, action, targetType, targetId, details) {
-    database.prepare(`
+  async function audit(actorId, action, targetType, targetId, details) {
+    await database.prepare(`
       INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, details_json, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(actorId || null, action, targetType || "", String(targetId || ""), JSON.stringify(details || {}), nowIso())
   }
 
-  function currentSemester() {
-    return database.prepare("SELECT * FROM semesters WHERE status = '当前学期' LIMIT 1").get() || null
+  async function currentSemester() {
+    return await database.prepare("SELECT * FROM semesters WHERE status = '当前学期' LIMIT 1").get() || null
   }
 
   function requireRole(user, allowedRoles) {
@@ -36,7 +54,7 @@ function createServices(database, config, options) {
     }
   }
 
-  function publicUser(user) {
+  async function publicUser(user) {
     const result = {
       id: user.id,
       role: user.role,
@@ -47,21 +65,21 @@ function createServices(database, config, options) {
       classId: user.class_id || ""
     }
     if (user.role === "counselor") {
-      const semester = currentSemester()
-      result.classIds = semester ? database.prepare(`
+      const semester = await currentSemester()
+      result.classIds = semester ? (await database.prepare(`
         SELECT class_id FROM counselor_class_assignments
         WHERE counselor_user_id = ? AND semester_id = ? AND active = 1 ORDER BY class_id
-      `).all(user.id, semester.id).map(function(row) { return row.class_id }) : []
+      `).all(user.id, semester.id)).map(function(row) { return row.class_id }) : []
     }
     return result
   }
 
-  function recordLoginFailure(attemptKey) {
+  async function recordLoginFailure(attemptKey) {
     const timestamp = now()
-    const existing = database.prepare("SELECT * FROM auth_login_attempts WHERE attempt_key = ?").get(attemptKey)
+    const existing = await database.prepare("SELECT * FROM auth_login_attempts WHERE attempt_key = ?").get(attemptKey)
     const failureCount = (existing ? existing.failure_count : 0) + 1
     const lockedUntil = failureCount >= 5 ? timestamp + 60 * 1000 : 0
-    database.prepare(`
+    await database.prepare(`
       INSERT INTO auth_login_attempts (attempt_key, failure_count, locked_until, updated_at)
       VALUES (?, ?, ?, ?)
       ON CONFLICT(attempt_key) DO UPDATE SET
@@ -72,7 +90,7 @@ function createServices(database, config, options) {
     return { failureCount: failureCount, lockedUntil: lockedUntil }
   }
 
-  function login(credentials) {
+  async function login(credentials) {
     const role = credentials && credentials.role
     const accountId = normalizeAccountId(credentials && credentials.accountId)
     const password = String(credentials && credentials.password || "")
@@ -80,55 +98,80 @@ function createServices(database, config, options) {
       throw new HttpError(400, "INVALID_CREDENTIALS", "请填写正确的身份、账号和密码")
     }
     const attemptKey = role + ":" + accountId
-    const attempt = database.prepare("SELECT * FROM auth_login_attempts WHERE attempt_key = ?").get(attemptKey)
+    const attempt = await database.prepare("SELECT * FROM auth_login_attempts WHERE attempt_key = ?").get(attemptKey)
     if (attempt && attempt.locked_until > now()) {
       throw new HttpError(429, "ACCOUNT_LOCKED", "登录失败次数过多，请稍后重试", {
         retryAfterSeconds: Math.ceil((attempt.locked_until - now()) / 1000)
       })
     }
     if (attempt && attempt.locked_until && attempt.locked_until <= now()) {
-      database.prepare("DELETE FROM auth_login_attempts WHERE attempt_key = ?").run(attemptKey)
+      await database.prepare("DELETE FROM auth_login_attempts WHERE attempt_key = ?").run(attemptKey)
     }
 
-    const user = database.prepare("SELECT * FROM users WHERE role = ? AND account_id = ? AND active = 1").get(role, accountId)
-    if (!user || !verifyPassword(password, user.password_salt, user.password_hash)) {
-      const failure = recordLoginFailure(attemptKey)
-      audit(user ? user.id : null, "登录失败", "account", accountId, { role: role })
+    const user = await database.prepare("SELECT * FROM users WHERE role = ? AND account_id = ? AND active = 1").get(role, accountId)
+    if (!user || !await verifyPasswordAsync(password, user.password_salt, user.password_hash)) {
+      const failure = await recordLoginFailure(attemptKey)
+      await audit(user ? user.id : null, "登录失败", "account", accountId, { role: role })
       throw new HttpError(failure.lockedUntil ? 429 : 401, failure.lockedUntil ? "ACCOUNT_LOCKED" : "INVALID_CREDENTIALS", "账号或密码错误")
     }
 
-    database.prepare("DELETE FROM auth_login_attempts WHERE attempt_key = ?").run(attemptKey)
+    await database.prepare("DELETE FROM auth_login_attempts WHERE attempt_key = ?").run(attemptKey)
+    if (passwordNeedsUpgrade(user.password_hash)) {
+      const upgraded = await createPasswordRecordAsync(password)
+      await database.prepare("UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?")
+        .run(upgraded.hash, upgraded.salt, user.id)
+    }
+    await database.prepare("DELETE FROM auth_sessions WHERE expires_at <= ?").run(Math.floor(now() / 1000))
     const token = issueToken(user, { secret: config.authSecret, ttlSeconds: config.tokenTtlSeconds, now: now() })
-    audit(user.id, "登录成功", "session", "", { role: role })
-    return { token: token, expiresIn: config.tokenTtlSeconds, user: publicUser(user) }
+    const tokenPayload = verifyToken(token, { secret:config.authSecret, now:now() })
+    await database.prepare(`
+      INSERT INTO auth_sessions (jti_hash, user_id, expires_at, revoked_at, created_at)
+      VALUES (?, ?, ?, NULL, ?)
+    `).run(tokenIdHash(tokenPayload.jti), user.id, tokenPayload.exp, nowIso())
+    await audit(user.id, "登录成功", "session", "", { role: role })
+    return { token: token, expiresIn: config.tokenTtlSeconds, user: await publicUser(user) }
   }
 
-  function authenticate(token) {
+  async function authenticate(token) {
     let payload
     try { payload = verifyToken(token, { secret: config.authSecret, now: now() }) }
     catch (error) { throw new HttpError(401, "INVALID_TOKEN", error.message) }
-    const user = database.prepare("SELECT * FROM users WHERE id = ? AND active = 1").get(payload.sub)
+    const session = await database.prepare("SELECT * FROM auth_sessions WHERE jti_hash = ? AND revoked_at IS NULL").get(tokenIdHash(payload.jti))
+    if (!session || session.user_id !== payload.sub || session.expires_at <= Math.floor(now() / 1000)) {
+      throw new HttpError(401, "INVALID_TOKEN", "登录会话已失效")
+    }
+    const user = await database.prepare("SELECT * FROM users WHERE id = ? AND active = 1").get(payload.sub)
     if (!user || user.role !== payload.role) throw new HttpError(401, "INVALID_TOKEN", "登录身份已失效")
     return user
   }
 
-  function getCurrentSemester() {
-    const semester = currentSemester()
+  async function logout(token) {
+    let payload
+    try { payload = verifyToken(token, { secret:config.authSecret, now:now() }) }
+    catch (error) { throw new HttpError(401, "INVALID_TOKEN", error.message) }
+    const result = await database.prepare("UPDATE auth_sessions SET revoked_at = ? WHERE jti_hash = ? AND revoked_at IS NULL")
+      .run(nowIso(), tokenIdHash(payload.jti))
+    if (result.changes) await audit(payload.sub, "退出登录", "session", "", {})
+    return { revoked:true }
+  }
+
+  async function getCurrentSemester() {
+    const semester = await currentSemester()
     if (!semester) throw new HttpError(404, "NO_CURRENT_SEMESTER", "当前学期尚未设置")
     return mapSemester(semester)
   }
 
-  function listAssessmentTasks(user) {
+  async function listAssessmentTasks(user) {
     requireRole(user, "student")
-    const semester = currentSemester()
+    const semester = await currentSemester()
     if (!semester || !user.class_id) return []
-    return database.prepare(`
+    return (await database.prepare(`
       SELECT id, assessment_id, title, semester_id, questionnaire_version, scoring_version, deadline, status, target_class_id
       FROM assessment_tasks
       WHERE semester_id = ? AND (target_class_id IS NULL OR target_class_id = ?)
         AND status IN ('未开始', '进行中')
       ORDER BY deadline, id
-    `).all(semester.id, user.class_id).map(mapTask)
+    `).all(semester.id, user.class_id)).map(mapTask)
   }
 
   function serializeJson(value, fieldName) {
@@ -146,7 +189,7 @@ function createServices(database, config, options) {
     return parsed
   }
 
-  function submitAssessmentResult(user, payload) {
+  async function submitAssessmentResult(user, payload) {
     requireRole(user, "student")
     payload = payload || {}
     if (!user.student_no || !user.class_id) throw new HttpError(409, "STUDENT_DATA_INCOMPLETE", "学生尚未关联班级")
@@ -154,7 +197,7 @@ function createServices(database, config, options) {
     if (!/^[A-Za-z0-9._:-]{6,128}$/.test(submissionId)) {
       throw new HttpError(422, "INVALID_RESULT", "submissionId 不合法")
     }
-    const existing = database.prepare("SELECT * FROM assessment_results WHERE submission_id = ?").get(submissionId)
+    const existing = await database.prepare("SELECT * FROM assessment_results WHERE submission_id = ?").get(submissionId)
     if (existing) {
       if (existing.student_user_id !== user.id) throw new HttpError(409, "SUBMISSION_CONFLICT", "提交编号已被占用")
       return { result: mapResultSummary(existing), idempotent: true }
@@ -165,14 +208,14 @@ function createServices(database, config, options) {
       throw new HttpError(422, "INVALID_RESULT", "assessmentId 不合法")
     }
     const taskId = payload.taskId ? String(payload.taskId) : null
-    const task = taskId ? database.prepare("SELECT * FROM assessment_tasks WHERE id = ?").get(taskId) : null
+    const task = taskId ? await database.prepare("SELECT * FROM assessment_tasks WHERE id = ?").get(taskId) : null
     if (taskId && !task) throw new HttpError(422, "TASK_NOT_FOUND", "测评任务不存在")
     if (task && task.target_class_id && task.target_class_id !== user.class_id) {
       throw new HttpError(403, "TASK_SCOPE_DENIED", "该任务未发布给当前学生")
     }
     if (task && task.assessment_id !== assessmentId) throw new HttpError(422, "VERSION_MISMATCH", "任务与量表不匹配")
     if (task && task.status !== "进行中") throw new HttpError(409, "TASK_NOT_ACTIVE", "测评任务当前不可提交")
-    const activeSemester = currentSemester()
+    const activeSemester = await currentSemester()
     if (task && (!activeSemester || task.semester_id !== activeSemester.id)) {
       throw new HttpError(409, "TASK_SEMESTER_INACTIVE", "该任务不属于当前学期")
     }
@@ -181,7 +224,7 @@ function createServices(database, config, options) {
     }
 
     const semester = task
-      ? database.prepare("SELECT * FROM semesters WHERE id = ?").get(task.semester_id)
+      ? await database.prepare("SELECT * FROM semesters WHERE id = ?").get(task.semester_id)
       : activeSemester
     if (!semester) throw new HttpError(422, "NO_SEMESTER", "结果无法关联学期")
     const questionnaireVersion = String(payload.questionnaireVersion || "")
@@ -209,15 +252,16 @@ function createServices(database, config, options) {
     const assessmentName = String(payload.assessmentName || "心理健康测评").trim().slice(0, 100)
     const questionnaireSnapshot = serializeJson(payload.questionnaireSnapshot, "questionnaireSnapshot")
     const scoringSnapshot = serializeJson(serverScore.rule, "scoringSnapshot")
-    const answerSnapshot = serializeJson(serverScore.outcome.responseDetails, "answerSnapshot")
+    const answerSnapshotPlaintext = serializeJson(serverScore.outcome.responseDetails, "answerSnapshot")
+    const answerSnapshot = dataProtector.protectText(answerSnapshotPlaintext, "assessment-answer-snapshot")
     const triggeredRules = serverScore.outcome.triggeredRules
     const triggeredRulesJson = serializeJson(triggeredRules, "triggeredRules")
     const clientCreatedAt = String(payload.createdAt || nowIso())
     if (isNaN(new Date(clientCreatedAt).getTime())) throw new HttpError(422, "INVALID_RESULT", "createdAt 不合法")
 
-    const saved = inTransaction(database, function() {
+    const saved = await inTransaction(database, async function() {
       const createdAt = nowIso()
-      const insert = database.prepare(`
+      const insert = await database.prepare(`
         INSERT INTO assessment_results
           (submission_id, student_user_id, student_no, class_id, task_id, semester_id,
            assessment_id, assessment_name, raw_score, max_score, normalized_risk_score,
@@ -237,29 +281,29 @@ function createServices(database, config, options) {
         const summary = triggeredRules.length
           ? "关键题规则已触发，请由有权限人员及时人工复核。"
           : "风险标准分达到关注阈值，请结合实际情况人工复核。"
-        database.prepare(`
+        await database.prepare(`
           INSERT INTO risk_events
             (result_id, student_user_id, class_id, semester_id, level, source, summary, status, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, '待确认', ?, ?)
         `).run(resultId, user.id, user.class_id, semester.id, riskLevel, task ? task.title : assessmentName, summary, createdAt, createdAt)
       }
-      audit(user.id, "提交测评结果", "assessment_result", resultId, { submissionId: submissionId, riskLevel: riskLevel })
+      await audit(user.id, "提交测评结果", "assessment_result", resultId, { submissionId: submissionId, riskLevel: riskLevel })
       return database.prepare("SELECT * FROM assessment_results WHERE id = ?").get(resultId)
     })
     return { result: mapResultSummary(saved), idempotent: false }
   }
 
-  function getMyResults(user) {
+  async function getMyResults(user) {
     requireRole(user, "student")
-    return database.prepare(`
+    return (await database.prepare(`
       SELECT * FROM assessment_results WHERE student_user_id = ? ORDER BY created_at DESC, id DESC
-    `).all(user.id).map(mapResultSummary)
+    `).all(user.id)).map(mapResultSummary)
   }
 
-  function assertCounselorClass(user, classId, semesterId) {
+  async function assertCounselorClass(user, classId, semesterId) {
     requireRole(user, "counselor")
-    const semester = semesterId || (currentSemester() || {}).id
-    const assignment = semester && database.prepare(`
+    const semester = semesterId || ((await currentSemester()) || {}).id
+    const assignment = semester && await database.prepare(`
       SELECT 1 FROM counselor_class_assignments
       WHERE counselor_user_id = ? AND class_id = ? AND semester_id = ? AND active = 1
     `).get(user.id, classId, semester)
@@ -267,21 +311,21 @@ function createServices(database, config, options) {
     return semester
   }
 
-  function classSummary(user, classId) {
-    const semester = currentSemester()
+  async function classSummary(user, classId) {
+    const semester = await currentSemester()
     if (!semester) throw new HttpError(404, "NO_CURRENT_SEMESTER", "当前学期尚未设置")
-    assertCounselorClass(user, classId, semester.id)
-    const classRow = database.prepare("SELECT * FROM classes WHERE id = ? AND active = 1").get(classId)
+    await assertCounselorClass(user, classId, semester.id)
+    const classRow = await database.prepare("SELECT * FROM classes WHERE id = ? AND active = 1").get(classId)
     if (!classRow) throw new HttpError(404, "CLASS_NOT_FOUND", "班级不存在")
-    const rows = database.prepare(`
+    const rows = await database.prepare(`
       WITH ranked AS (
-        SELECT ar.*, ROW_NUMBER() OVER (PARTITION BY student_user_id ORDER BY created_at DESC, id DESC) AS row_number
+        SELECT ar.*, ROW_NUMBER() OVER (PARTITION BY student_user_id ORDER BY created_at DESC, id DESC) AS result_rank
         FROM assessment_results ar WHERE semester_id = ? AND class_id = ?
       )
       SELECT u.student_no, u.display_name, u.class_id, r.id AS result_id,
              r.assessment_name, r.wellbeing_index, r.normalized_risk_score, r.risk_level, r.created_at
       FROM users u
-      LEFT JOIN ranked r ON r.student_user_id = u.id AND r.row_number = 1
+      LEFT JOIN ranked r ON r.student_user_id = u.id AND r.result_rank = 1
       WHERE u.role = 'student' AND u.class_id = ? AND u.active = 1
       ORDER BY u.student_no
     `).all(semester.id, classId, classId)
@@ -315,18 +359,18 @@ function createServices(database, config, options) {
     }
   }
 
-  function listCounselorClasses(user) {
+  async function listCounselorClasses(user) {
     requireRole(user, "counselor")
-    const semester = currentSemester()
+    const semester = await currentSemester()
     if (!semester) return []
-    const assignments = database.prepare(`
+    const assignments = await database.prepare(`
       SELECT c.id FROM counselor_class_assignments a
       JOIN classes c ON c.id = a.class_id
       WHERE a.counselor_user_id = ? AND a.semester_id = ? AND a.active = 1 AND c.active = 1
       ORDER BY c.id
     `).all(user.id, semester.id)
-    return assignments.map(function(row) {
-      const detail = classSummary(user, row.id)
+    return Promise.all(assignments.map(async function(row) {
+      const detail = await classSummary(user, row.id)
       return {
         id: detail.id,
         name: detail.name,
@@ -335,10 +379,10 @@ function createServices(database, config, options) {
         rate: detail.summary.completionRate,
         highRisk: detail.students.filter(function(item) { return item.riskLevel === "较高风险" || item.riskLevel === "紧急风险" }).length
       }
-    })
+    }))
   }
 
-  function listRiskEvents(user, status) {
+  async function listRiskEvents(user, status) {
     requireRole(user, "counselor")
     const params = [user.id]
     let statusClause = ""
@@ -347,7 +391,7 @@ function createServices(database, config, options) {
       statusClause = "AND e.status = ?"
       params.push(status)
     }
-    return database.prepare(`
+    return (await database.prepare(`
       SELECT e.*, u.student_no, u.display_name, c.name AS class_name
       FROM risk_events e
       JOIN counselor_class_assignments a
@@ -356,12 +400,12 @@ function createServices(database, config, options) {
       JOIN classes c ON c.id = e.class_id
       WHERE a.counselor_user_id = ? ${statusClause}
       ORDER BY e.created_at DESC, e.id DESC
-    `).all(...params).map(mapRiskEvent)
+    `).all(...params)).map(mapProtectedRiskEvent)
   }
 
-  function updateRiskEvent(user, eventId, input) {
+  async function updateRiskEvent(user, eventId, input) {
     requireRole(user, "counselor")
-    const event = database.prepare(`
+    const event = await database.prepare(`
       SELECT e.* FROM risk_events e
       JOIN counselor_class_assignments a
         ON a.class_id = e.class_id AND a.semester_id = e.semester_id AND a.active = 1
@@ -371,31 +415,32 @@ function createServices(database, config, options) {
     const status = String(input.status || event.status)
     if (RISK_STATUSES.indexOf(status) === -1) throw new HttpError(422, "INVALID_STATUS", "风险状态不合法")
     const note = String(input.followupNote || "").trim().slice(0, 1000)
-    database.prepare("UPDATE risk_events SET status = ?, followup_note = ?, updated_at = ? WHERE id = ?")
-      .run(status, note, nowIso(), eventId)
-    audit(user.id, "更新风险事件", "risk_event", eventId, { status: status })
-    return mapRiskEvent(database.prepare(`
+    const protectedNote = dataProtector.protectText(note, "risk-followup-note")
+    await database.prepare("UPDATE risk_events SET status = ?, followup_note = ?, updated_at = ? WHERE id = ?")
+      .run(status, protectedNote, nowIso(), eventId)
+    await audit(user.id, "更新风险事件", "risk_event", eventId, { status: status })
+    return mapProtectedRiskEvent(await database.prepare(`
       SELECT e.*, u.student_no, u.display_name, c.name AS class_name
       FROM risk_events e JOIN users u ON u.id = e.student_user_id JOIN classes c ON c.id = e.class_id
       WHERE e.id = ?
     `).get(eventId))
   }
 
-  function getStudentSupportSummary(user, studentNo) {
+  async function getStudentSupportSummary(user, studentNo) {
     requireRole(user, "counselor")
-    const student = database.prepare("SELECT * FROM users WHERE student_no = ? AND role = 'student' AND active = 1").get(String(studentNo))
+    const student = await database.prepare("SELECT * FROM users WHERE student_no = ? AND role = 'student' AND active = 1").get(String(studentNo))
     if (!student) throw new HttpError(404, "STUDENT_NOT_FOUND", "学生不存在")
-    const current = currentSemester()
-    assertCounselorClass(user, student.class_id, current && current.id)
-    const results = database.prepare(`
+    const current = await currentSemester()
+    await assertCounselorClass(user, student.class_id, current && current.id)
+    const results = (await database.prepare(`
       SELECT ar.* FROM assessment_results ar
       WHERE ar.student_user_id = ? AND EXISTS (
         SELECT 1 FROM counselor_class_assignments a
         WHERE a.counselor_user_id = ? AND a.class_id = ar.class_id
           AND a.semester_id = ar.semester_id AND a.active = 1
       ) ORDER BY ar.created_at DESC, ar.id DESC
-    `).all(student.id, user.id).map(mapResultSummary)
-    const risk = database.prepare(`
+    `).all(student.id, user.id)).map(mapResultSummary)
+    const risk = await database.prepare(`
       SELECT e.*, u.student_no, u.display_name, c.name AS class_name
       FROM risk_events e JOIN users u ON u.id = e.student_user_id JOIN classes c ON c.id = e.class_id
       WHERE e.student_user_id = ? AND EXISTS (
@@ -404,20 +449,20 @@ function createServices(database, config, options) {
           AND a.semester_id = e.semester_id AND a.active = 1
       ) ORDER BY e.created_at DESC, e.id DESC LIMIT 1
     `).get(student.id, user.id)
-    audit(user.id, "查看学生支持摘要", "student", student.student_no, {})
+    await audit(user.id, "查看学生支持摘要", "student", student.student_no, {})
     return {
       student: { studentId: student.student_no, studentName: student.display_name, classId: student.class_id },
       results: results,
-      risk: risk ? mapRiskEvent(risk) : null
+      risk: risk ? mapProtectedRiskEvent(risk) : null
     }
   }
 
-  function listSemesters(user) {
+  async function listSemesters(user) {
     requireRole(user, "admin")
-    return database.prepare("SELECT * FROM semesters ORDER BY start_date DESC, id DESC").all().map(mapSemester)
+    return (await database.prepare("SELECT * FROM semesters ORDER BY start_date DESC, id DESC").all()).map(mapSemester)
   }
 
-  function createSemester(user, input) {
+  async function createSemester(user, input) {
     requireRole(user, "admin")
     const name = String(input.name || "").trim()
     const startDate = validDate(input.startDate, "startDate")
@@ -426,40 +471,40 @@ function createServices(database, config, options) {
     if (startDate > endDate) throw new HttpError(422, "INVALID_SEMESTER", "结束日期不能早于开始日期")
     const id = String(input.id || "semester-" + crypto.randomUUID()).trim()
     try {
-      database.prepare("INSERT INTO semesters (id, name, start_date, end_date, status, created_at) VALUES (?, ?, ?, ?, '未开始', ?)")
+      await database.prepare("INSERT INTO semesters (id, name, start_date, end_date, status, created_at) VALUES (?, ?, ?, ?, '未开始', ?)")
         .run(id, name, startDate, endDate, nowIso())
     } catch (error) {
       throw new HttpError(409, "SEMESTER_EXISTS", "学期编号或名称已存在")
     }
-    audit(user.id, "创建学期", "semester", id, { name: name })
-    return mapSemester(database.prepare("SELECT * FROM semesters WHERE id = ?").get(id))
+    await audit(user.id, "创建学期", "semester", id, { name: name })
+    return mapSemester(await database.prepare("SELECT * FROM semesters WHERE id = ?").get(id))
   }
 
-  function setCurrentSemester(user, semesterId) {
+  async function setCurrentSemester(user, semesterId) {
     requireRole(user, "admin")
-    const target = database.prepare("SELECT * FROM semesters WHERE id = ?").get(semesterId)
+    const target = await database.prepare("SELECT * FROM semesters WHERE id = ?").get(semesterId)
     if (!target) throw new HttpError(404, "SEMESTER_NOT_FOUND", "学期不存在")
-    const previous = currentSemester()
-    inTransaction(database, function() {
-      database.prepare("UPDATE semesters SET status = '已归档' WHERE status = '当前学期' AND id <> ?").run(semesterId)
-      database.prepare("UPDATE semesters SET status = '当前学期' WHERE id = ?").run(semesterId)
-      audit(user.id, "切换当前学期", "semester", semesterId, { previousSemesterId: previous ? previous.id : "" })
+    const previous = await currentSemester()
+    await inTransaction(database, async function() {
+      await database.prepare("UPDATE semesters SET status = '已归档' WHERE status = '当前学期' AND id <> ?").run(semesterId)
+      await database.prepare("UPDATE semesters SET status = '当前学期' WHERE id = ?").run(semesterId)
+      await audit(user.id, "切换当前学期", "semester", semesterId, { previousSemesterId: previous ? previous.id : "" })
     })
-    return mapSemester(database.prepare("SELECT * FROM semesters WHERE id = ?").get(semesterId))
+    return mapSemester(await database.prepare("SELECT * FROM semesters WHERE id = ?").get(semesterId))
   }
 
-  function createCounselorAssignment(user, input) {
+  async function createCounselorAssignment(user, input) {
     requireRole(user, "admin")
-    const counselor = database.prepare("SELECT * FROM users WHERE staff_no = ? AND role = 'counselor' AND active = 1").get(String(input.staffId || ""))
-    const classRow = database.prepare("SELECT * FROM classes WHERE id = ? AND active = 1").get(String(input.classId || ""))
-    const semester = database.prepare("SELECT * FROM semesters WHERE id = ?").get(String(input.semesterId || ""))
+    const counselor = await database.prepare("SELECT * FROM users WHERE staff_no = ? AND role = 'counselor' AND active = 1").get(String(input.staffId || ""))
+    const classRow = await database.prepare("SELECT * FROM classes WHERE id = ? AND active = 1").get(String(input.classId || ""))
+    const semester = await database.prepare("SELECT * FROM semesters WHERE id = ?").get(String(input.semesterId || ""))
     if (!counselor || !classRow || !semester) throw new HttpError(422, "INVALID_ASSIGNMENT", "辅导员、班级或学期不存在")
-    database.prepare(`
+    await database.prepare(`
       INSERT INTO counselor_class_assignments (counselor_user_id, class_id, semester_id, active, created_at)
       VALUES (?, ?, ?, 1, ?)
       ON CONFLICT(counselor_user_id, class_id, semester_id) DO UPDATE SET active = 1
     `).run(counselor.id, classRow.id, semester.id, nowIso())
-    audit(user.id, "分配辅导员班级", "class", classRow.id, { counselorId: counselor.id, semesterId: semester.id })
+    await audit(user.id, "分配辅导员班级", "class", classRow.id, { counselorId: counselor.id, semesterId: semester.id })
     return { staffId: counselor.staff_no, classId: classRow.id, semesterId: semester.id, active: true }
   }
 
@@ -469,8 +514,214 @@ function createServices(database, config, options) {
     requireRole:requireRole
   })
 
+  async function listAdminAssessmentTasks(user) {
+    requireRole(user, "admin")
+    return (await database.prepare(`
+      SELECT t.*, s.name AS semester_name, c.name AS class_name
+      FROM assessment_tasks t
+      JOIN semesters s ON s.id = t.semester_id
+      LEFT JOIN classes c ON c.id = t.target_class_id
+      ORDER BY t.created_at DESC, t.id DESC
+    `).all()).map(function(row) {
+      const task = mapTask(row)
+      task.semesterName = row.semester_name
+      task.targetClassName = row.class_name || "全部班级"
+      return task
+    })
+  }
+
+  async function createAdminAssessmentTask(user, input) {
+    requireRole(user, "admin")
+    input = input || {}
+    const title = String(input.title || "").trim()
+    if (!title || title.length > 100) throw new HttpError(422, "INVALID_TASK", "任务名称不能为空且最多100个字符")
+    const assessmentId = Number(input.assessmentId)
+    if (!Number.isInteger(assessmentId) || assessmentId < 1 || assessmentId > 8) {
+      throw new HttpError(422, "INVALID_TASK", "assessmentId 不合法")
+    }
+    const semesterId = String(input.semesterId || ((await currentSemester()) || {}).id || "")
+    const semester = await database.prepare("SELECT * FROM semesters WHERE id = ?").get(semesterId)
+    if (!semester) throw new HttpError(422, "INVALID_TASK", "学期不存在")
+    const deadline = validDate(input.deadline, "deadline")
+    if (deadline < semester.start_date || deadline > semester.end_date) {
+      throw new HttpError(422, "INVALID_TASK", "截止日期必须位于所选学期内")
+    }
+    const targetClassId = String(input.targetClassId || "").trim() || null
+    if (targetClassId && !await database.prepare("SELECT 1 FROM classes WHERE id = ? AND active = 1").get(targetClassId)) {
+      throw new HttpError(422, "INVALID_TASK", "目标班级不存在或已停用")
+    }
+    let rule
+    try { rule = scoringEngine.getRule(assessmentId, input.scoringVersion || undefined) }
+    catch (error) { throw new HttpError(422, "VERSION_MISMATCH", error.message) }
+    const questionnaireVersion = String(input.questionnaireVersion || rule.questionnaireVersion)
+    if (questionnaireVersion !== rule.questionnaireVersion) {
+      throw new HttpError(422, "VERSION_MISMATCH", "问卷版本与评分规则不匹配")
+    }
+    const id = String(input.id || "task-" + crypto.randomUUID()).trim()
+    if (!/^[A-Za-z0-9._:-]{3,128}$/.test(id)) throw new HttpError(422, "INVALID_TASK", "任务编号不合法")
+    try {
+      await database.prepare(`
+        INSERT INTO assessment_tasks
+          (id, assessment_id, title, semester_id, questionnaire_version, scoring_version, deadline, status, target_class_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, '草稿', ?, ?)
+      `).run(id, assessmentId, title, semesterId, questionnaireVersion, rule.scoringVersion, deadline, targetClassId, nowIso())
+    } catch (error) {
+      throw new HttpError(409, "TASK_EXISTS", "任务编号已存在")
+    }
+    await audit(user.id, "创建测评任务", "assessment_task", id, { assessmentId:assessmentId, semesterId:semesterId, targetClassId:targetClassId || "all" })
+    return mapTask(await database.prepare("SELECT * FROM assessment_tasks WHERE id = ?").get(id))
+  }
+
+  async function transitionAdminAssessmentTask(user, taskId, input) {
+    requireRole(user, "admin")
+    const task = await database.prepare("SELECT * FROM assessment_tasks WHERE id = ?").get(String(taskId))
+    if (!task) throw new HttpError(404, "TASK_NOT_FOUND", "测评任务不存在")
+    const status = String(input && input.status || "")
+    if (!(TASK_TRANSITIONS[task.status] || []).includes(status)) {
+      throw new HttpError(409, "TASK_TRANSITION_DENIED", "不能从“" + task.status + "”变更为“" + status + "”")
+    }
+    if (status === "进行中") {
+      const semester = await database.prepare("SELECT * FROM semesters WHERE id = ?").get(task.semester_id)
+      if (!semester || semester.status !== "当前学期") throw new HttpError(409, "TASK_SEMESTER_INACTIVE", "只有当前学期任务可以发布")
+      if (task.deadline < new Date(now()).toISOString().slice(0, 10)) throw new HttpError(409, "TASK_EXPIRED", "截止日期已过，不能发布")
+    }
+    await database.prepare("UPDATE assessment_tasks SET status = ? WHERE id = ?").run(status, task.id)
+    await audit(user.id, "变更测评任务状态", "assessment_task", task.id, { previousStatus:task.status, status:status })
+    return mapTask(await database.prepare("SELECT * FROM assessment_tasks WHERE id = ?").get(task.id))
+  }
+
+  async function submitCounselorContent(user, input) {
+    requireRole(user, "counselor")
+    input = input || {}
+    const type = String(input.type || "civics")
+    if (CONTENT_TYPES.indexOf(type) === -1) throw new HttpError(422, "INVALID_CONTENT", "内容类型不合法")
+    const title = String(input.title || "").trim()
+    const category = String(input.category || "").trim().slice(0, 80)
+    const content = String(input.content || "").trim()
+    const summary = String(input.summary || content.slice(0, 100)).trim()
+    if (!title || title.length > 160) throw new HttpError(422, "INVALID_CONTENT", "标题不能为空且最多160个字符")
+    if (!content || content.length > 20000) throw new HttpError(422, "INVALID_CONTENT", "正文不能为空且最多20000个字符")
+    if (summary.length > 500) throw new HttpError(422, "INVALID_CONTENT", "摘要最多500个字符")
+    const timestamp = nowIso()
+    const insert = await database.prepare(`
+      INSERT INTO content_items
+        (type, title, category, summary, content, status, author_user_id, review_note, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, '待审核', ?, '', ?, ?)
+    `).run(type, title, category, summary, content, user.id, timestamp, timestamp)
+    const id = Number(insert.lastInsertRowid)
+    await audit(user.id, "提交内容审核", "content_item", id, { type:type, category:category })
+    return findContentItem(id)
+  }
+
+  async function listMyCounselorContent(user) {
+    requireRole(user, "counselor")
+    return (await database.prepare(contentSelect() + " WHERE ci.author_user_id = ? ORDER BY ci.created_at DESC, ci.id DESC")
+      .all(user.id)).map(mapContentItem)
+  }
+
+  async function listPublishedContent(user, type) {
+    requireRole(user, ROLES)
+    const params = []
+    let typeClause = ""
+    if (type) {
+      if (CONTENT_TYPES.indexOf(type) === -1) throw new HttpError(400, "INVALID_CONTENT_TYPE", "内容类型不合法")
+      typeClause = "AND ci.type = ?"
+      params.push(type)
+    }
+    return (await database.prepare(contentSelect() + " WHERE ci.status = '已发布' " + typeClause + " ORDER BY ci.published_at DESC, ci.id DESC")
+      .all(...params)).map(mapContentItem)
+  }
+
+  async function listAdminContent(user, filters) {
+    requireRole(user, "admin")
+    filters = filters || {}
+    const params = []
+    const clauses = []
+    if (filters.type) {
+      if (CONTENT_TYPES.indexOf(filters.type) === -1) throw new HttpError(400, "INVALID_CONTENT_TYPE", "内容类型不合法")
+      clauses.push("ci.type = ?")
+      params.push(filters.type)
+    }
+    if (filters.status) {
+      if (CONTENT_STATUSES.indexOf(filters.status) === -1) throw new HttpError(400, "INVALID_STATUS", "内容状态不合法")
+      clauses.push("ci.status = ?")
+      params.push(filters.status)
+    }
+    const where = clauses.length ? " WHERE " + clauses.join(" AND ") : ""
+    return (await database.prepare(contentSelect() + where + " ORDER BY ci.updated_at DESC, ci.id DESC LIMIT 200")
+      .all(...params)).map(mapContentItem)
+  }
+
+  async function reviewAdminContent(user, contentId, input) {
+    requireRole(user, "admin")
+    const item = await database.prepare("SELECT * FROM content_items WHERE id = ?").get(Number(contentId))
+    if (!item) throw new HttpError(404, "CONTENT_NOT_FOUND", "内容不存在")
+    if (item.status !== "待审核") throw new HttpError(409, "CONTENT_ALREADY_REVIEWED", "内容已经完成审核")
+    const status = String(input && input.status || "")
+    if (["已发布", "已退回"].indexOf(status) === -1) throw new HttpError(422, "INVALID_STATUS", "审核状态只能是已发布或已退回")
+    const reviewNote = String(input && input.reviewNote || "").trim().slice(0, 500)
+    if (status === "已退回" && !reviewNote) throw new HttpError(422, "REVIEW_NOTE_REQUIRED", "退回内容必须填写原因")
+    const timestamp = nowIso()
+    await database.prepare(`
+      UPDATE content_items SET status = ?, reviewer_user_id = ?, review_note = ?,
+        published_at = ?, updated_at = ? WHERE id = ?
+    `).run(status, user.id, reviewNote, status === "已发布" ? timestamp : null, timestamp, item.id)
+    await audit(user.id, status === "已发布" ? "审核发布内容" : "退回内容", "content_item", item.id, { type:item.type })
+    return findContentItem(item.id)
+  }
+
+  async function listAdminAuditLogs(user, limit) {
+    requireRole(user, "admin")
+    const safeLimit = Math.min(200, Math.max(1, Number(limit) || 100))
+    return (await database.prepare(`
+      SELECT l.*, u.display_name AS actor_name, u.account_id AS actor_account_id
+      FROM audit_logs l LEFT JOIN users u ON u.id = l.actor_user_id
+      ORDER BY l.created_at DESC, l.id DESC LIMIT ${safeLimit}
+    `).all()).map(function(row) {
+      return {
+        id:row.id,
+        actorName:row.actor_name || "系统",
+        actorAccountId:row.actor_account_id || "",
+        action:row.action,
+        targetType:row.target_type,
+        targetId:row.target_id,
+        details:safeJson(row.details_json, {}),
+        createdAt:row.created_at
+      }
+    })
+  }
+
+  function contentSelect() {
+    return `
+      SELECT ci.*, author.display_name AS author_name, reviewer.display_name AS reviewer_name
+      FROM content_items ci
+      JOIN users author ON author.id = ci.author_user_id
+      LEFT JOIN users reviewer ON reviewer.id = ci.reviewer_user_id
+    `
+  }
+
+  async function findContentItem(id) {
+    const row = await database.prepare(contentSelect() + " WHERE ci.id = ?").get(Number(id))
+    if (!row) throw new HttpError(404, "CONTENT_NOT_FOUND", "内容不存在")
+    return mapContentItem(row)
+  }
+
+  async function checkReadiness() {
+    const result = database.ping ? await database.ping() : database.prepare("SELECT 1 AS ready").get()
+    if (!result || result.ready !== 1) throw new Error("数据库就绪检查失败")
+    return { status:"ready", database:"ok", service:"shuzhi-heart-harbor-server" }
+  }
+
+  function mapProtectedRiskEvent(row) {
+    const result = mapRiskEvent(row)
+    result.followupNote = dataProtector.unprotectText(row.followup_note, "risk-followup-note")
+    return result
+  }
+
   return {
+    checkReadiness,
     login,
+    logout,
     authenticate,
     getCurrentSemester,
     listAssessmentTasks,
@@ -485,6 +736,15 @@ function createServices(database, config, options) {
     createSemester,
     setCurrentSemester,
     createCounselorAssignment,
+    listAdminAssessmentTasks,
+    createAdminAssessmentTask,
+    transitionAdminAssessmentTask,
+    submitCounselorContent,
+    listMyCounselorContent,
+    listPublishedContent,
+    listAdminContent,
+    reviewAdminContent,
+    listAdminAuditLogs,
     previewPersonnelImport:personnelImports.previewPersonnelImport,
     listImportBatches:personnelImports.listImportBatches,
     getImportBatch:personnelImports.getImportBatch,
@@ -573,7 +833,7 @@ function mapResultSummary(row) {
     riskLevel: row.risk_level,
     questionnaireVersion: row.questionnaire_version,
     scoringVersion: row.scoring_version,
-    triggeredRules: JSON.parse(row.triggered_rules_json || "[]"),
+    triggeredRules: safeJson(row.triggered_rules_json, []),
     createdAt: row.created_at
   }
 }
@@ -594,6 +854,30 @@ function mapRiskEvent(row) {
     followupNote: row.followup_note,
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  }
+}
+
+function safeJson(value, fallback) {
+  if (value !== null && typeof value === "object") return value
+  try { return JSON.parse(value) }
+  catch (error) { return fallback }
+}
+
+function mapContentItem(row) {
+  return {
+    id:row.id,
+    type:row.type,
+    title:row.title,
+    category:row.category,
+    summary:row.summary,
+    content:row.content,
+    status:row.status,
+    authorName:row.author_name,
+    reviewerName:row.reviewer_name || "",
+    reviewNote:row.review_note,
+    publishTime:row.published_at || "",
+    createdAt:row.created_at,
+    updatedAt:row.updated_at
   }
 }
 

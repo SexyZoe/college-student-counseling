@@ -8,6 +8,18 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "smoke": "node scripts/smoke-test.js",
+    "contract:test": "node scripts/runtime-contract-test.js",
+    "persistence:probe": "node scripts/persistence-probe.js",
+    "db:mysql:migrate": "node scripts/mysql-migrate.js",
+    "db:mysql:status": "node scripts/mysql-migrate.js --status",
+    "db:mysql:smoke": "node scripts/mysql-schema-smoke.js",
+    "db:sqlite:backup": "node scripts/sqlite-backup.js",
+    "db:sqlite:restore-verify": "node scripts/sqlite-restore-verify.js",
+    "load:test": "node scripts/load-test.js"
+  },
+  "dependencies": {
+    "mysql2": "^3.14.4"
   }
 }

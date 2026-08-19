@@ -18,6 +18,10 @@ global.wx = {
       options.fail({ errMsg:"request:fail" })
       return
     }
+    if (options.url.endsWith("/api/v1/assessment-results/me") && options.header.Authorization === "Bearer revoked-token") {
+      options.success({ statusCode:401, data:{ ok:false, error:{ code:"INVALID_TOKEN", message:"登录会话已失效" } } })
+      return
+    }
     if (options.url.endsWith("/api/v1/auth/login")) {
       options.success({ statusCode:200, data:{ ok:true, data:{ token:"token-1", expiresIn:3600, user:{ role:"student" } } } })
       return
@@ -63,6 +67,35 @@ async function test(name, callback) {
     assert.strictEqual(response.user.role, "student")
     assert.strictEqual(storage.backendSession.token, "token-1")
     assert.strictEqual(apiClient.getSettings().baseUrl, "http://127.0.0.1:8787")
+  })
+
+  await test("退出登录会通知后端并清除本地令牌", async function() {
+    apiClient.configure({ enabled:true })
+    storage.backendSession = { token:"token-logout" }
+    await apiClient.logout()
+    assert.strictEqual(storage.backendSession, undefined)
+    assert.strictEqual(calls[0].url.endsWith("/api/v1/auth/logout"), true)
+    assert.strictEqual(calls[0].header.Authorization, "Bearer token-logout")
+  })
+
+  await test("服务端令牌失效时自动清除本地后端会话", async function() {
+    apiClient.configure({ enabled:true })
+    storage.backendSession = { token:"revoked-token" }
+    await assert.rejects(apiClient.getMyResults(), error => error.code === "INVALID_TOKEN")
+    assert.strictEqual(storage.backendSession, undefined)
+  })
+
+  await test("管理员任务与内容审核客户端使用受保护接口", async function() {
+    apiClient.configure({ enabled:true })
+    storage.backendSession = { token:"admin-token" }
+    await apiClient.createAdminAssessmentTask({ title:"测试任务" })
+    await apiClient.transitionAdminAssessmentTask("task-1", "进行中")
+    await apiClient.getAdminContent("civics", "待审核")
+    await apiClient.reviewAdminContent(7, "已发布", "通过")
+    assert.strictEqual(calls[0].url.endsWith("/api/v1/admin/assessment-tasks"), true)
+    assert.strictEqual(calls[1].method, "PATCH")
+    assert.strictEqual(calls[2].url.includes("status=%E5%BE%85%E5%AE%A1%E6%A0%B8"), true)
+    assert.strictEqual(calls[3].url.endsWith("/api/v1/admin/content-items/7/review"), true)
   })
 
   await test("离线结果进入队列，登录后可幂等同步并回写远端编号", async function() {

@@ -1,13 +1,14 @@
 const { HttpError } = require("./errors")
 const { inTransaction } = require("./database")
 const { normalizeRows, validateFormat, passwordRecord, fileHash, safeRow } = require("./personnel-import")
+const { isDeepStrictEqual } = require("node:util")
 
 function createPersonnelImportServices(database, context) {
   const nowIso = context.nowIso
   const audit = context.audit
   const requireRole = context.requireRole
 
-  function previewPersonnelImport(user, input) {
+  async function previewPersonnelImport(user, input) {
     requireRole(user, "admin")
     input = input || {}
     const clientBatchId = String(input.clientBatchId || "").trim()
@@ -19,16 +20,16 @@ function createPersonnelImportServices(database, context) {
     if (!/\.csv$/i.test(fileName)) throw new HttpError(422, "IMPORT_FILE_INVALID", "当前稳定导入格式为 CSV")
     if (Buffer.byteLength(csvText, "utf8") > 512 * 1024) throw new HttpError(413, "IMPORT_FILE_TOO_LARGE", "CSV 文件不能超过 512KB")
     const hash = fileHash(csvText)
-    const existing = database.prepare("SELECT * FROM import_batches WHERE client_batch_id = ?").get(clientBatchId)
+    const existing = await database.prepare("SELECT * FROM import_batches WHERE client_batch_id = ?").get(clientBatchId)
     if (existing) {
       if (existing.file_hash !== hash) throw new HttpError(409, "IMPORT_BATCH_CONFLICT", "同一批次编号不能对应不同文件")
       return mapImportBatch(existing, true)
     }
 
     const rows = normalizeRows(csvText)
-    const result = buildPlan(rows)
+    const result = await buildPlan(rows)
     const status = result.errors.length ? "校验失败" : "待确认"
-    const insert = database.prepare(`
+    const insert = await database.prepare(`
       INSERT INTO import_batches
         (client_batch_id, file_name, file_hash, status, total_rows, create_count, update_count,
          unchanged_count, error_count, plan_json, errors_json, created_by_user_id, created_at)
@@ -39,13 +40,13 @@ function createPersonnelImportServices(database, context) {
       JSON.stringify({ items:result.items }), JSON.stringify(result.errors), user.id, nowIso()
     )
     const batchId = Number(insert.lastInsertRowid)
-    audit(user.id, "预检人员导入", "import_batch", batchId, {
+    await audit(user.id, "预检人员导入", "import_batch", batchId, {
       fileName:fileName, status:status, totalRows:rows.length, errorCount:result.errors.length
     })
-    return mapImportBatch(database.prepare("SELECT * FROM import_batches WHERE id = ?").get(batchId), true)
+    return mapImportBatch(await database.prepare("SELECT * FROM import_batches WHERE id = ?").get(batchId), true)
   }
 
-  function buildPlan(rows) {
+  async function buildPlan(rows) {
     const errors = []
     const duplicateKeys = Object.create(null)
     rows.forEach(function(row) {
@@ -58,52 +59,54 @@ function createPersonnelImportServices(database, context) {
 
     const plannedClassIds = new Set(rows.filter(function(row) { return row.type === "class" }).map(function(row) { return row.classId }))
     const plannedCounselors = new Set(rows.filter(function(row) { return row.type === "counselor" }).map(function(row) { return row.accountId }))
-    rows.forEach(function(row) {
-      if (row.type === "student" && !classExists(row.classId, plannedClassIds)) {
+    for (const row of rows) {
+      if (row.type === "student" && !await classExists(row.classId, plannedClassIds)) {
         errors.push({ rowNumber:row.rowNumber, field:"班级编号", message:"班级不存在，需先在同一文件添加班级行" })
       }
       if (row.type === "assignment") {
-        if (!classExists(row.classId, plannedClassIds)) errors.push({ rowNumber:row.rowNumber, field:"班级编号", message:"分配的班级不存在" })
-        if (!counselorExists(row.accountId, plannedCounselors)) errors.push({ rowNumber:row.rowNumber, field:"账号", message:"分配的辅导员不存在" })
-        if (!database.prepare("SELECT 1 FROM semesters WHERE id = ?").get(row.semesterId)) {
+        if (!await classExists(row.classId, plannedClassIds)) errors.push({ rowNumber:row.rowNumber, field:"班级编号", message:"分配的班级不存在" })
+        if (!await counselorExists(row.accountId, plannedCounselors)) errors.push({ rowNumber:row.rowNumber, field:"账号", message:"分配的辅导员不存在" })
+        if (!await database.prepare("SELECT 1 FROM semesters WHERE id = ?").get(row.semesterId)) {
           errors.push({ rowNumber:row.rowNumber, field:"学期编号", message:"学期不存在" })
         }
       }
-    })
+    }
 
     const invalidRows = new Set(errors.map(function(error) { return error.rowNumber }))
     const orderedRows = rows.slice().sort(function(left, right) { return entityOrder(left.type) - entityOrder(right.type) || left.rowNumber - right.rowNumber })
-    const items = []
-    orderedRows.forEach(function(row) {
+    const validRows = orderedRows.filter(function(row) { return !invalidRows.has(row.rowNumber) })
+    const items = await mapWithConcurrency(validRows, 8, async function(row) {
       if (invalidRows.has(row.rowNumber)) return
       try {
-        if (row.type === "class") items.push(classPlan(row))
-        else if (row.type === "student" || row.type === "counselor") items.push(userPlan(row))
-        else if (row.type === "assignment") items.push(assignmentPlan(row))
+        if (row.type === "class") return await classPlan(row)
+        if (row.type === "student" || row.type === "counselor") return await userPlan(row)
+        if (row.type === "assignment") return await assignmentPlan(row)
       } catch (error) {
         if (error instanceof HttpError) errors.push({ rowNumber:row.rowNumber, field:"数据冲突", message:error.message })
         else throw error
       }
+      return null
     })
+    const plannedItems = items.filter(Boolean)
     const counts = { create:0, update:0, unchanged:0 }
-    items.forEach(function(item) { counts[item.operation]++ })
-    return { items:items, errors:errors, counts:counts }
+    plannedItems.forEach(function(item) { counts[item.operation]++ })
+    return { items:plannedItems, errors:errors, counts:counts }
   }
 
-  function classExists(classId, planned) {
+  async function classExists(classId, planned) {
     if (planned.has(classId)) return true
-    const existing = database.prepare("SELECT active FROM classes WHERE id = ?").get(classId)
+    const existing = await database.prepare("SELECT active FROM classes WHERE id = ?").get(classId)
     return !!(existing && existing.active)
   }
 
-  function counselorExists(accountId, planned) {
+  async function counselorExists(accountId, planned) {
     if (planned.has(accountId)) return true
-    const existing = database.prepare("SELECT active FROM users WHERE role = 'counselor' AND account_id = ?").get(accountId)
+    const existing = await database.prepare("SELECT active FROM users WHERE role = 'counselor' AND account_id = ?").get(accountId)
     return !!(existing && existing.active)
   }
 
-  function classPlan(row) {
-    const existing = database.prepare("SELECT * FROM classes WHERE id = ?").get(row.classId)
+  async function classPlan(row) {
+    const existing = await database.prepare("SELECT * FROM classes WHERE id = ?").get(row.classId)
     const before = existing ? classSnapshot(existing) : null
     const after = {
       id:row.classId, name:row.className, major:row.major || (before ? before.major : ""), active:1
@@ -112,19 +115,19 @@ function createPersonnelImportServices(database, context) {
       "班级 " + row.className)
   }
 
-  function userPlan(row) {
+  async function userPlan(row) {
     const role = row.type
     const identityColumn = role === "student" ? "student_no" : "staff_no"
-    const matches = database.prepare(`SELECT * FROM users WHERE account_id = ? OR ${identityColumn} = ?`).all(row.accountId, row.accountId)
+    const matches = await database.prepare(`SELECT * FROM users WHERE account_id = ? OR ${identityColumn} = ?`).all(row.accountId, row.accountId)
     const unique = Array.from(new Map(matches.map(function(item) { return [item.id, item] })).values())
     if (unique.length > 1) throw new HttpError(409, "IMPORT_IDENTITY_CONFLICT", "账号与学工号分别属于不同用户")
     const existing = unique[0] || null
     if (existing && existing.role !== role) throw new HttpError(409, "IMPORT_ROLE_CONFLICT", "该账号已被其他角色使用")
     if (!existing && !row.password) throw new HttpError(422, "IMPORT_PASSWORD_REQUIRED", "新增账号必须填写至少 8 位初始密码")
-    const password = passwordRecord(row)
+    const password = await passwordRecord(row)
     const before = existing ? userSnapshot(existing) : null
     const id = before ? before.id : role + "-" + row.accountId
-    const idOwner = database.prepare("SELECT account_id FROM users WHERE id = ?").get(id)
+    const idOwner = await database.prepare("SELECT account_id FROM users WHERE id = ?").get(id)
     if (!before && idOwner) throw new HttpError(409, "IMPORT_USER_ID_CONFLICT", "系统用户编号已被占用")
     const after = {
       id:id,
@@ -144,10 +147,10 @@ function createPersonnelImportServices(database, context) {
       (role === "student" ? "学生 " : "辅导员 ") + row.name)
   }
 
-  function assignmentPlan(row) {
-    const counselor = database.prepare("SELECT * FROM users WHERE role = 'counselor' AND account_id = ?").get(row.accountId)
+  async function assignmentPlan(row) {
+    const counselor = await database.prepare("SELECT * FROM users WHERE role = 'counselor' AND account_id = ?").get(row.accountId)
     const counselorId = counselor ? counselor.id : "counselor-" + row.accountId
-    const existing = database.prepare(`
+    const existing = await database.prepare(`
       SELECT * FROM counselor_class_assignments
       WHERE counselor_user_id = ? AND class_id = ? AND semester_id = ?
     `).get(counselorId, row.classId, row.semesterId)
@@ -165,109 +168,112 @@ function createPersonnelImportServices(database, context) {
     return { row:safeRow(row), entityType:entityType, entityKey:entityKey, operation:operation, before:before, after:after, summary:summary }
   }
 
-  function listImportBatches(user) {
+  async function listImportBatches(user) {
     requireRole(user, "admin")
-    return database.prepare("SELECT * FROM import_batches ORDER BY created_at DESC, id DESC LIMIT 100").all().map(function(row) {
+    return (await database.prepare("SELECT * FROM import_batches ORDER BY created_at DESC, id DESC LIMIT 100").all()).map(function(row) {
       return mapImportBatch(row, false)
     })
   }
 
-  function getImportBatch(user, batchId) {
+  async function getImportBatch(user, batchId) {
     requireRole(user, "admin")
-    const row = findBatch(batchId)
+    const row = await findBatch(batchId)
     return mapImportBatch(row, true)
   }
 
-  function confirmImportBatch(user, batchId) {
+  async function confirmImportBatch(user, batchId) {
     requireRole(user, "admin")
-    const batch = findBatch(batchId)
+    const batch = await findBatch(batchId)
     if (batch.status === "已导入") return mapImportBatch(batch, true)
     if (batch.status !== "待确认") throw new HttpError(409, "IMPORT_NOT_CONFIRMABLE", "当前批次不能确认导入")
     const plan = parseJson(batch.plan_json, { items:[] })
-    inTransaction(database, function() {
+    await inTransaction(database, async function() {
       let sequence = 0
-      plan.items.forEach(function(item) {
-        if (item.operation === "unchanged") return
-        assertPlanFresh(item)
-        applyItem(item)
+      for (const item of plan.items) {
+        if (item.operation === "unchanged") continue
+        await assertPlanFresh(item)
+        await applyItem(item)
         sequence++
-        database.prepare(`
+        await database.prepare(`
           INSERT INTO import_batch_changes
             (batch_id, sequence_no, entity_type, entity_key, operation, before_json, after_json)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `).run(batch.id, sequence, item.entityType, item.entityKey, item.operation,
           item.before ? JSON.stringify(item.before) : null, JSON.stringify(item.after))
-      })
-      database.prepare("UPDATE import_batches SET status = '已导入', applied_at = ? WHERE id = ?").run(nowIso(), batch.id)
-      audit(user.id, "确认人员导入", "import_batch", batch.id, {
+      }
+      await database.prepare("UPDATE import_batches SET status = '已导入', applied_at = ? WHERE id = ?").run(nowIso(), batch.id)
+      await audit(user.id, "确认人员导入", "import_batch", batch.id, {
         createCount:batch.create_count, updateCount:batch.update_count, unchangedCount:batch.unchanged_count
       })
     })
-    return mapImportBatch(findBatch(batch.id), true)
+    return mapImportBatch(await findBatch(batch.id), true)
   }
 
-  function rollbackImportBatch(user, batchId) {
+  async function rollbackImportBatch(user, batchId) {
     requireRole(user, "admin")
-    const batch = findBatch(batchId)
+    const batch = await findBatch(batchId)
     if (batch.status === "已回滚") return mapImportBatch(batch, true)
     if (batch.status !== "已导入") throw new HttpError(409, "IMPORT_NOT_ROLLBACKABLE", "只有已导入批次可以回滚")
-    const changes = database.prepare("SELECT * FROM import_batch_changes WHERE batch_id = ? ORDER BY sequence_no DESC").all(batch.id)
-    inTransaction(database, function() {
-      changes.forEach(function(change) {
+    const changes = await database.prepare("SELECT * FROM import_batch_changes WHERE batch_id = ? ORDER BY sequence_no DESC").all(batch.id)
+    await inTransaction(database, async function() {
+      for (const change of changes) {
         const after = parseJson(change.after_json, null)
         const before = parseJson(change.before_json, null)
-        assertChangeFresh(change, after)
-        rollbackChange(change, before, after)
-      })
-      database.prepare("UPDATE import_batches SET status = '已回滚', rolled_back_at = ? WHERE id = ?").run(nowIso(), batch.id)
-      audit(user.id, "回滚人员导入", "import_batch", batch.id, { changeCount:changes.length })
+        await assertChangeFresh(change, after)
+        await rollbackChange(change, before, after)
+      }
+      await database.prepare("UPDATE import_batches SET status = '已回滚', rolled_back_at = ? WHERE id = ?").run(nowIso(), batch.id)
+      await audit(user.id, "回滚人员导入", "import_batch", batch.id, { changeCount:changes.length })
     })
-    return mapImportBatch(findBatch(batch.id), true)
+    return mapImportBatch(await findBatch(batch.id), true)
   }
 
-  function assertPlanFresh(item) {
-    const current = currentSnapshot(item.entityType, item.after)
+  async function assertPlanFresh(item) {
+    const current = await currentSnapshot(item.entityType, item.after)
     if (item.operation === "create" && current) throw new HttpError(409, "IMPORT_PREVIEW_STALE", "预检后数据已变化，请重新选择文件预检")
     if (item.operation === "update" && !same(current, item.before)) throw new HttpError(409, "IMPORT_PREVIEW_STALE", "预检后数据已变化，请重新选择文件预检")
   }
 
-  function assertChangeFresh(change, after) {
-    const current = currentSnapshot(change.entity_type, after)
-    if (!same(current, after)) throw new HttpError(409, "IMPORT_ROLLBACK_STALE", "导入后相关数据已再次修改，不能自动覆盖回滚")
+  async function assertChangeFresh(change, after) {
+    const current = await currentSnapshot(change.entity_type, after)
+    if (!same(current, after)) throw new HttpError(409, "IMPORT_ROLLBACK_STALE", "导入后相关数据已再次修改，不能自动覆盖回滚", {
+      entityType:change.entity_type,
+      entityKey:change.entity_key
+    })
   }
 
-  function currentSnapshot(entityType, data) {
+  async function currentSnapshot(entityType, data) {
     if (entityType === "class") {
-      const row = database.prepare("SELECT * FROM classes WHERE id = ?").get(data.id)
+      const row = await database.prepare("SELECT * FROM classes WHERE id = ?").get(data.id)
       return row ? classSnapshot(row) : null
     }
     if (entityType === "user") {
-      const row = database.prepare("SELECT * FROM users WHERE id = ?").get(data.id)
+      const row = await database.prepare("SELECT * FROM users WHERE id = ?").get(data.id)
       return row ? userSnapshot(row) : null
     }
-    const row = database.prepare(`
+    const row = await database.prepare(`
       SELECT * FROM counselor_class_assignments WHERE counselor_user_id = ? AND class_id = ? AND semester_id = ?
     `).get(data.counselorUserId, data.classId, data.semesterId)
     return row ? assignmentSnapshot(row) : null
   }
 
-  function applyItem(item) {
+  async function applyItem(item) {
     const value = item.after
     if (item.entityType === "class") {
-      if (item.operation === "create") database.prepare("INSERT INTO classes (id, name, major, active) VALUES (?, ?, ?, ?)").run(value.id, value.name, value.major, value.active)
-      else database.prepare("UPDATE classes SET name = ?, major = ?, active = ? WHERE id = ?").run(value.name, value.major, value.active, value.id)
+      if (item.operation === "create") await database.prepare("INSERT INTO classes (id, name, major, active) VALUES (?, ?, ?, ?)").run(value.id, value.name, value.major, value.active)
+      else await database.prepare("UPDATE classes SET name = ?, major = ?, active = ? WHERE id = ?").run(value.name, value.major, value.active, value.id)
       return
     }
     if (item.entityType === "user") {
       if (item.operation === "create") {
-        database.prepare(`
+        await database.prepare(`
           INSERT INTO users
             (id, role, account_id, password_hash, password_salt, display_name, student_no, staff_no, class_id, active, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(value.id, value.role, value.accountId, value.passwordHash, value.passwordSalt, value.displayName,
           value.studentNo, value.staffNo, value.classId, value.active, value.createdAt)
       } else {
-        database.prepare(`
+        await database.prepare(`
           UPDATE users SET password_hash = ?, password_salt = ?, display_name = ?, student_no = ?,
             staff_no = ?, class_id = ?, active = ? WHERE id = ?
         `).run(value.passwordHash, value.passwordSalt, value.displayName, value.studentNo,
@@ -276,48 +282,48 @@ function createPersonnelImportServices(database, context) {
       return
     }
     if (item.operation === "create") {
-      database.prepare(`
+      await database.prepare(`
         INSERT INTO counselor_class_assignments (counselor_user_id, class_id, semester_id, active, created_at)
         VALUES (?, ?, ?, ?, ?)
       `).run(value.counselorUserId, value.classId, value.semesterId, value.active, value.createdAt)
     } else {
-      database.prepare(`
+      await database.prepare(`
         UPDATE counselor_class_assignments SET active = ?
         WHERE counselor_user_id = ? AND class_id = ? AND semester_id = ?
       `).run(value.active, value.counselorUserId, value.classId, value.semesterId)
     }
   }
 
-  function rollbackChange(change, before, after) {
+  async function rollbackChange(change, before, after) {
     if (change.operation === "create") {
-      if (change.entity_type === "class") database.prepare("UPDATE classes SET active = 0 WHERE id = ?").run(after.id)
-      else if (change.entity_type === "user") database.prepare("UPDATE users SET active = 0 WHERE id = ?").run(after.id)
-      else database.prepare(`
+      if (change.entity_type === "class") await database.prepare("UPDATE classes SET active = 0 WHERE id = ?").run(after.id)
+      else if (change.entity_type === "user") await database.prepare("UPDATE users SET active = 0 WHERE id = ?").run(after.id)
+      else await database.prepare(`
         UPDATE counselor_class_assignments SET active = 0
         WHERE counselor_user_id = ? AND class_id = ? AND semester_id = ?
       `).run(after.counselorUserId, after.classId, after.semesterId)
       return
     }
-    applyItem({ entityType:change.entity_type, operation:"update", after:before })
+    await applyItem({ entityType:change.entity_type, operation:"update", after:before })
   }
 
-  function listAdminStudents(user) {
+  async function listAdminStudents(user) {
     requireRole(user, "admin")
-    return database.prepare(`
+    return (await database.prepare(`
       SELECT u.student_no, u.display_name, u.class_id, u.active, c.name AS class_name, c.major
       FROM users u LEFT JOIN classes c ON c.id = u.class_id
       WHERE u.role = 'student' ORDER BY u.student_no
-    `).all().map(function(row) {
+    `).all()).map(function(row) {
       return { studentId:row.student_no, studentName:row.display_name, classId:row.class_id || "", className:row.class_name || "", major:row.major || "", active:!!row.active }
     })
   }
 
-  function listAdminAssignments(user, semesterId) {
+  async function listAdminAssignments(user, semesterId) {
     requireRole(user, "admin")
     const params = []
     let clause = ""
     if (semesterId) { clause = "WHERE a.semester_id = ?"; params.push(semesterId) }
-    return database.prepare(`
+    return (await database.prepare(`
       SELECT a.*, u.staff_no, u.display_name, c.name AS class_name, s.name AS semester_name
       FROM counselor_class_assignments a
       JOIN users u ON u.id = a.counselor_user_id
@@ -325,13 +331,13 @@ function createPersonnelImportServices(database, context) {
       JOIN semesters s ON s.id = a.semester_id
       ${clause}
       ORDER BY s.start_date DESC, u.staff_no, c.id
-    `).all(...params).map(function(row) {
+    `).all(...params)).map(function(row) {
       return { key:row.counselor_user_id + ":" + row.class_id + ":" + row.semester_id, staffId:row.staff_no, counselorName:row.display_name, classId:row.class_id, className:row.class_name, semesterId:row.semester_id, semesterName:row.semester_name, active:!!row.active }
     })
   }
 
-  function findBatch(batchId) {
-    const row = database.prepare("SELECT * FROM import_batches WHERE id = ?").get(Number(batchId))
+  async function findBatch(batchId) {
+    const row = await database.prepare("SELECT * FROM import_batches WHERE id = ?").get(Number(batchId))
     if (!row) throw new HttpError(404, "IMPORT_BATCH_NOT_FOUND", "导入批次不存在")
     return row
   }
@@ -358,6 +364,20 @@ function entityOrder(type) {
   return type === "class" ? 1 : (type === "student" || type === "counselor" ? 2 : 3)
 }
 
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length)
+  let cursor = 0
+  async function worker() {
+    while (true) {
+      const index = cursor++
+      if (index >= items.length) return
+      results[index] = await mapper(items[index], index)
+    }
+  }
+  await Promise.all(Array.from({ length:Math.min(limit, items.length || 1) }, worker))
+  return results
+}
+
 function classSnapshot(row) {
   return { id:row.id, name:row.name, major:row.major, active:Number(row.active) }
 }
@@ -378,10 +398,11 @@ function assignmentSnapshot(row) {
 }
 
 function same(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right)
+  return isDeepStrictEqual(left, right)
 }
 
 function parseJson(value, fallback) {
+  if (value !== null && typeof value === "object") return value
   try { return JSON.parse(value) } catch (error) { return fallback }
 }
 

@@ -113,10 +113,11 @@ Page({
       content: "确定要退出登录吗？",
       success: (res) => {
         if (res.confirm) {
-          auth.clearSession("学生主动退出")
-          this.setData({ isLoggedIn: false, userInfo: null })
-          wx.showToast({ title: "已退出登录", icon: "none" })
-          setTimeout(() => wx.reLaunch({ url: "/pages/login/login" }), 300)
+          auth.logout("学生主动退出").then(() => {
+            this.setData({ isLoggedIn: false, userInfo: null })
+            wx.showToast({ title: "已退出登录", icon: "none" })
+            setTimeout(() => wx.reLaunch({ url: "/pages/login/login" }), 300)
+          })
         }
       }
     })
