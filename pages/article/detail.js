@@ -1,7 +1,7 @@
 ﻿// pages/article/detail.js
-const util = require('../../utils/util')
+var util = require('../../utils/util')
 
-const categoryColors = {
+var categoryColors = {
   "压力管理": "#FFAAA5",
   "人际关系": "#FFD3B6",
   "自我成长": "#B5EAD7",
@@ -21,35 +21,57 @@ Page({
     isFavorite: false
   },
 
-  onLoad(options) {
-    const id = parseInt(options.id) || 1
+  onLoad: function(options) {
+    var id = parseInt(options.id) || 1
     this.setData({ articleId: id })
 
-    const articles = wx.getStorageSync("articles") || []
-    let article = articles.find(a => a.id === id)
-    if (!article) {
-      const mocks = this.getMockArticles()
-      article = mocks.find(a => a.id === id) || mocks[0]
+    var articles = wx.getStorageSync("articles") || []
+    var article = null
+    for (var i = 0; i < articles.length; i++) {
+      if (articles[i].id === id) { article = articles[i]; break }
     }
-    article = { ...article, tagColor: categoryColors[article.category] || "#FFAAA5" }
+    if (!article) {
+      var mocks = this.getMockArticles()
+      for (var j = 0; j < mocks.length; j++) {
+        if (mocks[j].id === id) { article = mocks[j]; break }
+      }
+      article = article || mocks[0]
+    }
 
-    const contents = this.getArticleContents()
-    const rawContent = article.content || contents[id] || "文章内容暂缺，敬请期待。"
-    const paragraphs = rawContent.split("\n\n").filter(p => p.trim().length > 0)
+    // 增加浏览量
+    if (article && articles.length) {
+      var found = false
+      for (var k = 0; k < articles.length; k++) {
+        if (articles[k].id === id) {
+          articles[k].views = (articles[k].views || 0) + 1
+          found = true
+          break
+        }
+      }
+      if (found) wx.setStorageSync("articles", articles)
+      article.views = (article.views || 0) + 1
+    }
 
-    const favorites = wx.getStorageSync("favorites") || []
+    var tagColor = categoryColors[article.category] || "#FFAAA5"
+    article = Object.assign({}, article, { tagColor: tagColor })
+
+    var contents = this.getArticleContents()
+    var rawContent = article.content || contents[id] || "文章内容暂缺，敬请期待。"
+    var paragraphs = rawContent.split("\n\n").filter(function(p) { return p.trim().length > 0 })
+
+    var favorites = wx.getStorageSync("favorites") || []
     this.setData({
-      article,
+      article: article,
       contentParagraphs: paragraphs,
-      isFavorite: favorites.includes(id)
+      isFavorite: favorites.indexOf(id) >= 0
     })
   },
 
-  getMockArticles() {
+  getMockArticles: function() {
     return getApp().getArticles()
   },
 
-  getArticleContents() {
+  getArticleContents: function() {
     return {
       1: "考试压力是很多同学在学期末都会面临的问题。紧张本身并不一定是坏事——适度的紧张可以帮助我们保持警觉，提高学习效率。但当紧张超出正常范围，开始影响睡眠、食欲和日常情绪时，就需要采取措施了。\n\n深呼吸法是缓解考试压力最直接有效的方法之一。当你感到紧张时，尝试进行腹式呼吸：用鼻子深深吸气4秒，屏住呼吸4秒，然后通过嘴巴缓缓呼气6秒。重复这个循环3-5次，你会感到身体逐渐放松下来。\n\n合理的时间管理也能有效减轻紧张。把复习内容拆分成小块，每25分钟专注学习后休息5分钟，这就是著名的番茄工作法。每完成4个番茄时段后，给自己一个15-30分钟的长休息。\n\n运动是天然的缓解压力良药。即使是20分钟的快走，也能促进大脑释放内啡肽——这种化学物质能让你感到愉悦和放松。考试期间不要放弃运动习惯。",
       2: "良好的人际关系对心理健康至关重要。大学是拓展社交圈的重要时期，但同时也可能面临室友矛盾、社交紧张等挑战。\n\n建立良好关系的第一步是学会倾听。真正的倾听不只是等待对方说完，而是要理解对方的感受和需求。当你专注倾听时，对方会感受到被尊重和重视。\n\n学会温和而坚定地表达自己的边界同样重要。如果你总是为了迎合他人而牺牲自己的需求，久而久之会产生怨恨情绪。你可以尝试用\"我语句\"表达自己的感受，比如\"当你对我大声说话时，我感到很不舒服\"。\n\n人际冲突是不可避免的，关键在于如何处理。当冲突发生时，先让自己冷静下来，然后尝试站在对方的角度思考问题。记住：关系中的冲突往往不是关于谁对谁错，而是关于如何理解和尊重彼此的差异。",
@@ -62,26 +84,37 @@ Page({
     }
   },
 
-  onLike() { this.setData({ isLiked: !this.data.isLiked }) },
-  onFavorite() {
-    const newState = !this.data.isFavorite
+  onLike: function() {
+    this.setData({ isLiked: !this.data.isLiked })
+  },
+
+  onFavorite: function() {
+    var newState = !this.data.isFavorite
     this.setData({ isFavorite: newState })
-    let favs = wx.getStorageSync("favorites") || []
-    if (newState) { favs.push(this.data.articleId) } else { favs = favs.filter(id => id !== this.data.articleId) }
+    var favs = wx.getStorageSync("favorites") || []
+    var idx = favs.indexOf(this.data.articleId)
+    if (newState) {
+      if (idx < 0) favs.push(this.data.articleId)
+    } else {
+      if (idx >= 0) favs.splice(idx, 1)
+    }
     wx.setStorageSync("favorites", favs)
     wx.showToast({ title: newState ? '已收藏' : '已取消收藏', icon: 'none' })
   },
 
-  /* 触发微信原生分享 */
-  onShareAppMessage() {
+  onShareAppMessage: function() {
+    var article = this.data.article || {}
+    var imageUrl = article.cover || ''
     return {
-      title: this.data.article.title,
-      path: '/pages/article/detail?id=' + this.data.articleId
+      title: article.title || '数智心港湾·心理健康科普',
+      path: '/pages/article/detail?id=' + this.data.articleId,
+      imageUrl: imageUrl
     }
   },
 
-  onShare() { /* 空实现，分享按钮 open-type="share" 会自动触发 onShareAppMessage */ },
+  onShare: function() {},
 
-  /* 跳转投稿页 */
-  goSubmit() { wx.navigateTo({ url: '/pages/submit/submit' }) }
+  goSubmit: function() {
+    wx.navigateTo({ url: '/pages/submit/submit' })
+  }
 })

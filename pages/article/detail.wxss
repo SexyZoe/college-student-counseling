@@ -1,113 +1,76 @@
-/* pages/article/detail.wxss */
+﻿/* pages/article/detail.wxss */
 
 .detail-container {
   min-height: 100vh;
   background-color: #faf7f2;
-  padding-bottom: 100rpx;
+  padding-bottom: 180rpx;
 }
 
 /* 文章头部 */
-.article-header {
-  background-color: #ffffff;
-  position: relative;
-}
+.article-header { background-color: #ffffff; }
+.article-cover { width: 100%; height: 400rpx; }
+.header-content { padding: 30rpx; }
 
-.article-cover {
-  width: 100%;
-  height: 400rpx;
+.header-tag-row {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16rpx;
 }
-
-.header-content {
-  padding: 30rpx;
-}
+.header-views { font-size: 22rpx; color: #aaa; }
 
 .article-title {
-  font-size: 36rpx;
-  font-weight: bold;
-  color: #4a4a4a;
-  line-height: 1.4;
-  margin-bottom: 20rpx;
+  font-size: 36rpx; font-weight: bold; color: #4a4a4a;
+  line-height: 1.4; margin-bottom: 20rpx; display: block;
 }
 
-.article-info {
-  display: flex;
-  align-items: center;
-}
+.article-info { display: flex; flex-direction: column; gap: 10rpx; }
+.info-row { display: flex; align-items: center; gap: 8rpx; }
+.info-text { font-size: 24rpx; color: #999; }
 
-.info-author {
-  font-size: 26rpx;
-  color: #8a8a8a;
-  margin-right: 20rpx;
-}
-
-.info-date {
-  font-size: 26rpx;
-  color: #b0b0b0;
-  margin-right: 20rpx;
-}
-
-.info-category {
-  padding: 6rpx 16rpx;
-  border-radius: 6rpx;
+.info-tag {
+  display: inline-block; padding: 4rpx 14rpx; border-radius: 6rpx;
   font-size: 22rpx;
-  background-color: rgba(91, 155, 213, 0.1);
-  color: #f4a3a8;
 }
 
 /* 文章正文 */
 .article-body {
-  background-color: #ffffff;
-  margin-top: 20rpx;
-  padding: 30rpx;
+  background-color: #ffffff; margin-top: 20rpx; padding: 30rpx;
+}
+.article-paragraph {
+  display: block; font-size: 30rpx; color: #4a4a4a;
+  line-height: 1.9; margin-bottom: 24rpx; text-indent: 2em;
 }
 
-.article-content {
-  font-size: 30rpx;
-  color: #4a4a4a;
-  line-height: 1.8;
-}
+.divider-wrap { padding: 20rpx 30rpx; }
 
-.article-content p {
-  margin-bottom: 20rpx;
-}
-
-.article-content h3 {
-  font-size: 32rpx;
-  font-weight: bold;
-  color: #4a4a4a;
-  margin: 30rpx 0 20rpx;
-}
-
-.article-content strong {
-  color: #f4a3a8;
-}
-
-/* 操作按钮 */
+/* 底部操作栏 */
 .action-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background-color: #ffffff;
-  display: flex;
-  justify-content: space-around;
-  padding: 20rpx;
-  padding-bottom: env(safe-area-inset-bottom);
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background-color: #ffffff; display: flex; justify-content: space-around;
+  padding: 20rpx; padding-bottom: env(safe-area-inset-bottom);
   box-shadow: 0 -2rpx 10rpx rgba(0, 0, 0, 0.05);
+  z-index: 99;
 }
-
 .action-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: flex; flex-direction: column; align-items: center;
+  background: none; border: none; padding: 0; margin: 0; line-height: 1;
 }
+.action-item::after { border: none; }
+.action-text { font-size: 24rpx; color: #8a8a8a; margin-top: 8rpx; }
 
-.action-text {
-  font-size: 24rpx;
-  color: #8a8a8a;
-  margin-top: 8rpx;
+.share-item {
+  background: none; padding: 0; margin: 0;
+  border-radius: 0; line-height: 1; font-size: inherit;
 }
+.share-item::after { border: none; }
 
-.action-item.collected .action-text {
-  color: #f5d79e;
+/* 投稿入口 */
+.submit-entry {
+  display: flex; align-items: center; justify-content: center;
+  margin: 30rpx; padding: 24rpx; border-radius: 16rpx;
+  background: #fff; gap: 12rpx;
 }
+.submit-icon-wrap {
+  width: 48rpx; height: 48rpx; border-radius: 50%;
+  background: #fef0f2; display: flex; align-items: center; justify-content: center;
+}
+.submit-entry-text { font-size: 26rpx; color: #666; flex: 1; }

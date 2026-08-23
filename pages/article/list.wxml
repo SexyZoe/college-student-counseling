@@ -1,17 +1,22 @@
-<!-- pages/article/list.wxml -->
-<view class="article-container">
+﻿<view class="article-container">
   <!-- 分类标签 -->
   <view class="category-section">
+    <!-- 仅看收藏开关 -->
+    <view class="fav-toggle" bindtap="onToggleFavoritesOnly">
+      <van-icon name="{{showFavoritesOnly ? 'star' : 'star-o'}}" size="18px" color="{{showFavoritesOnly ? '#FFD700' : '#999'}}" />
+      <text class="fav-toggle-text" style="color: {{showFavoritesOnly ? '#FFD700' : '#999'}};">仅看收藏</text>
+    </view>
     <scroll-view class="category-scroll" scroll-x show-scrollbar="{{false}}">
       <view class="category-list">
         <view
-          class="category-item {{currentCategory === item ? 'active' : ''}}"
+          class="category-item {{currentCategory === item.name ? 'active' : ''}}"
           wx:for="{{categories}}"
-          wx:key="*this"
+          wx:key="name"
           bindtap="onCategoryChange"
-          data-category="{{item}}"
+          data-category="{{item.name}}"
         >
-          <text class="category-text">{{item}}</text>
+          <text class="category-text">{{item.name}}</text>
+          <text class="category-count" wx:if="{{item.count > 0}}">{{item.count}}</text>
         </view>
       </view>
     </scroll-view>
@@ -19,17 +24,15 @@
 
   <!-- 文章列表 -->
   <view class="article-list" wx:if="{{filteredList.length > 0}}">
-    <view
-      class="article-card"
-      wx:for="{{filteredList}}"
-      wx:key="id"
-      bindtap="onArticleTap"
-      data-id="{{item.id}}"
-    >
+    <view class="article-card" wx:for="{{filteredList}}" wx:key="id" bindtap="onArticleTap" data-id="{{item.id}}">
       <image class="article-cover" src="{{item.cover}}" mode="aspectFill" />
       <view class="article-content">
-        <view class="article-tag" style="background-color: rgba(91, 155, 213, 0.1); color: #f4a3a8;">
-          {{item.category}}
+        <view class="article-top-row">
+          <view class="article-tag">{{item.category}}</view>
+          <!-- 收藏星标 -->
+          <view class="fav-star" catchtap="onToggleFav" data-id="{{item.id}}">
+            <van-icon name="{{item.isFav ? 'star' : 'star-o'}}" size="20px" color="{{item.isFav ? '#FFD700' : '#ccc'}}" />
+          </view>
         </view>
         <text class="article-title">{{item.title}}</text>
         <text class="article-summary">{{item.summary}}</text>
@@ -49,7 +52,9 @@
     <view class="empty-icon-box">
       <van-icon name="newspaper-o" size="40px" color="#999" />
     </view>
-    <text class="empty-text">暂无{{currentCategory}}类文章</text>
-    <text class="empty-tip">敬请期待更多精彩内容</text>
+    <text class="empty-text" wx:if="{{showFavoritesOnly}}">暂无收藏文章</text>
+    <text class="empty-text" wx:else>{{currentCategory === '全部' ? '暂无文章' : '暂无' + currentCategory + '类文章'}}</text>
+    <text class="empty-tip" wx:if="{{showFavoritesOnly}}">点击文章卡片右上角星标即可收藏</text>
+    <text class="empty-tip" wx:else>敬请期待更多精彩内容</text>
   </view>
 </view>
