@@ -1,3 +1,4 @@
+const apiClient = require('../../utils/api-client')
 Page({
   data: { categories: ["全部", "理想信念", "网络素养", "社会实践"], activeCategory: "全部", articles: [], filteredArticles: [] },
   onShow() { this.loadArticles() },
@@ -5,6 +6,14 @@ Page({
     const articles = (wx.getStorageSync("civicsArticles") || []).filter(item => item.status === "已发布")
     this.setData({ articles })
     this.filterArticles()
+    if (apiClient.getSettings().enabled) {
+      apiClient.getPublishedContent("civics").then(items => {
+        const remote = items.map(item => Object.assign({}, item, { author:item.authorName, reviewer:item.reviewerName }))
+        wx.setStorageSync("civicsArticles", remote)
+        this.setData({ articles:remote, categories:["全部"].concat(Array.from(new Set(remote.map(item => item.category).filter(Boolean)))) })
+        this.filterArticles()
+      }).catch(error => wx.setStorageSync("backendLastError", { code:error.code, message:error.message, time:Date.now() }))
+    }
   },
   onCategoryTap(e) { this.setData({ activeCategory: e.currentTarget.dataset.category }); this.filterArticles() },
   filterArticles() {

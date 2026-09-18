@@ -1,4 +1,6 @@
 const crypto = require("node:crypto")
+const fs = require("node:fs")
+const pathModule = require("node:path")
 const { HttpError } = require("./errors")
 const { createRateLimiter } = require("./rate-limit")
 const { createMetrics } = require("./metrics")
@@ -33,6 +35,16 @@ function createHttpApp(services, config, options) {
       enforceRateLimit(limiter, response, "general:" + clientIp, config.generalRateLimitPerMinute || 300)
       const url = requestUrl
       const path = url.pathname.replace(/\/$/, "") || "/"
+      if (request.method === "GET" && path === "/") return redirect(response, "/web/")
+      if (request.method === "GET" && (path === "/web" || path.startsWith("/web/"))) {
+        return serveWebAsset(response, path, config.webRoot)
+      }
+      const mediaMatch = path.match(/^\/media\/([^/]+)$/)
+      if (request.method === "GET" && mediaMatch) {
+        const asset = await services.getPublishedMedia(mediaMatch[1])
+        if (!asset) throw new HttpError(404, "MEDIA_NOT_FOUND", "媒体文件不存在或尚未发布")
+        return streamMedia(request, response, asset)
+      }
       if (request.method === "GET" && path === "/health") {
         return sendOk(response, { status: "ok", service: "shuzhi-heart-harbor-server" })
       }
@@ -104,6 +116,14 @@ function createHttpApp(services, config, options) {
       }
       if (request.method === "GET" && path === "/api/v1/counselor/content-items/mine") {
         return sendOk(response, await services.listMyCounselorContent(user))
+      }
+      if (request.method === "POST" && path === "/api/v1/counselor/media") {
+        request.setTimeout(config.mediaUploadTimeoutMs || 300000)
+        return sendOk(response, await services.uploadContentMedia(user, {
+          fileName:decodeHeader(request.headers["x-file-name"]),
+          mimeType:request.headers["content-type"],
+          buffer:await readBinary(request, config.maxMediaBytes || 100 * 1024 * 1024)
+        }), 201)
       }
       if (request.method === "POST" && path === "/api/v1/counselor/content-items") {
         return sendOk(response, await services.submitCounselorContent(user, await readJson(request, config.maxBodyBytes)), 201)
@@ -201,6 +221,7 @@ function clientAddress(request, trustProxy) {
 function routeLabel(pathname) {
   return String(pathname || "/")
     .replace(/\/$/, "")
+    .replace(/\/media\/[^/]+/g, "/media/:id")
     .replace(/\/(classes|risk-events|students|semesters|import-batches)\/[^/]+/g, "/$1/:id") || "/"
 }
 
@@ -257,6 +278,87 @@ function readJson(request, maxBytes) {
   })
 }
 
+function readBinary(request, maxBytes) {
+  return new Promise(function(resolve, reject) {
+    const declared = Number(request.headers["content-length"] || 0)
+    if (declared > maxBytes) return reject(new HttpError(413, "MEDIA_TOO_LARGE", "上传文件超过允许大小"))
+    const chunks = []
+    let size = 0
+    let exceeded = false
+    request.on("data", function(chunk) {
+      size += chunk.length
+      if (size > maxBytes) exceeded = true
+      else chunks.push(chunk)
+    })
+    request.on("end", function() {
+      if (exceeded) return reject(new HttpError(413, "MEDIA_TOO_LARGE", "上传文件超过允许大小"))
+      resolve(Buffer.concat(chunks))
+    })
+    request.on("error", reject)
+  })
+}
+
+function decodeHeader(value) {
+  try { return decodeURIComponent(String(value || "")) }
+  catch (error) { return String(value || "") }
+}
+
+function redirect(response, location) {
+  response.statusCode = 302
+  response.setHeader("Location", location)
+  response.end()
+}
+
+async function serveWebAsset(response, requestPath, configuredRoot) {
+  const files = {
+    "/web":"index.html",
+    "/web/":"index.html",
+    "/web/index.html":"index.html",
+    "/web/app.js":"app.js",
+    "/web/styles.css":"styles.css"
+  }
+  const name = files[requestPath]
+  if (!name) throw new HttpError(404, "NOT_FOUND", "页面不存在")
+  const root = configuredRoot || pathModule.join(__dirname, "..", "web")
+  let body
+  try { body = await fs.promises.readFile(pathModule.join(root, name)) }
+  catch (error) { throw new HttpError(404, "NOT_FOUND", "Web 管理端资源不存在") }
+  response.statusCode = 200
+  response.setHeader("Content-Type", name.endsWith(".html") ? "text/html; charset=utf-8" : (name.endsWith(".js") ? "text/javascript; charset=utf-8" : "text/css; charset=utf-8"))
+  response.setHeader("Cache-Control", name === "index.html" ? "no-cache" : "public, max-age=3600")
+  response.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+  response.end(body)
+}
+
+async function streamMedia(request, response, asset) {
+  let stat
+  try { stat = await fs.promises.stat(asset.path) }
+  catch (error) { throw new HttpError(404, "MEDIA_NOT_FOUND", "媒体文件不存在") }
+  const size = stat.size
+  const range = String(request.headers.range || "")
+  response.setHeader("Content-Type", asset.mimeType)
+  response.setHeader("Accept-Ranges", "bytes")
+  response.setHeader("Cache-Control", "public, max-age=86400, immutable")
+  response.setHeader("Content-Security-Policy", "default-src 'none'")
+  if (range) {
+    const match = range.match(/^bytes=(\d*)-(\d*)$/)
+    if (!match) throw new HttpError(416, "RANGE_INVALID", "媒体请求范围不合法")
+    const start = match[1] ? Number(match[1]) : 0
+    const end = match[2] ? Math.min(Number(match[2]), size - 1) : size - 1
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || start >= size) {
+      response.setHeader("Content-Range", "bytes */" + size)
+      throw new HttpError(416, "RANGE_INVALID", "媒体请求范围不合法")
+    }
+    response.statusCode = 206
+    response.setHeader("Content-Range", "bytes " + start + "-" + end + "/" + size)
+    response.setHeader("Content-Length", String(end - start + 1))
+    return fs.createReadStream(asset.path, { start, end }).pipe(response)
+  }
+  response.statusCode = 200
+  response.setHeader("Content-Length", String(size))
+  return fs.createReadStream(asset.path).pipe(response)
+}
+
 function setHeaders(request, response, requestId, config) {
   response.setHeader("Content-Type", "application/json; charset=utf-8")
   response.setHeader("Cache-Control", "no-store")
@@ -274,7 +376,7 @@ function setHeaders(request, response, requestId, config) {
     response.setHeader("Access-Control-Allow-Origin", origin)
     response.setHeader("Vary", "Origin")
   }
-  response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type")
+  response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-File-Name")
   response.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
 }
 

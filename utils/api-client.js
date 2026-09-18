@@ -187,6 +187,18 @@ function submitCounselorContent(data) {
   return request({ path:"/api/v1/counselor/content-items", method:"POST", data:data })
 }
 
+function getPublishedContent(type) {
+  return request({ path:"/api/v1/content-items" + (type ? "?type=" + encodeURIComponent(type) : "") }).then(function(items) {
+    const baseUrl = getSettings().baseUrl
+    return (items || []).map(function(item) {
+      item.media = (item.media || []).map(function(media) {
+        return Object.assign({}, media, { url:/^https?:\/\//.test(media.url) ? media.url : baseUrl + media.url })
+      })
+      return item
+    })
+  })
+}
+
 function getAdminContent(type, status) {
   const query = []
   if (type) query.push("type=" + encodeURIComponent(type))
@@ -243,6 +255,7 @@ module.exports = {
   transitionAdminAssessmentTask: transitionAdminAssessmentTask,
   getMyCounselorContent: getMyCounselorContent,
   submitCounselorContent: submitCounselorContent,
+  getPublishedContent: getPublishedContent,
   getAdminContent: getAdminContent,
   reviewAdminContent: reviewAdminContent,
   getAdminAuditLogs: getAdminAuditLogs
