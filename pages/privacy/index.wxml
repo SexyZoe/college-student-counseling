@@ -1,11 +1,11 @@
 <view class="policy-page">
   <view class="policy-hero">
     <text class="hero-title">你的心理数据应被认真保护</text>
-    <text class="hero-sub">版本 1.0 · 本地演示说明</text>
+    <text class="hero-sub">版本 1.1 · 账号与个人信息说明</text>
   </view>
   <view class="policy-card">
     <text class="policy-title">我们处理哪些信息</text>
-    <text class="policy-text">为完成身份确认和测评，本系统可能处理学号、姓名、班级、测评回答、结果、风险提示和必要的跟进记录。不会收集通讯录、精确位置等无关信息。</text>
+    <text class="policy-text">管理员导入班级、学号和手机号用于创建账号、确定班级归属和人工重置密码；初始密码为登记手机号后6位。姓名由学生登录后自行填写并确认用途。系统还处理测评回答、结果、风险提示和必要的跟进记录。不会收集通讯录、精确位置等无关信息。</text>
   </view>
   <view class="policy-card">
     <text class="policy-title">使用目的与访问范围</text>

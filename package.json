@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "数智心港湾微信小程序",
   "scripts": {
-    "test": "node tests/auth.test.js && node tests/login-page.test.js && node tests/scoring-engine.test.js && node tests/semester.test.js && node tests/backend-sync.test.js && node tests/source-integrity.test.js && node --test server/test/*.test.js",
+    "test": "node tests/auth.test.js && node tests/login-page.test.js && node tests/cloud-login.test.js && node tests/scoring-engine.test.js && node tests/semester.test.js && node tests/backend-sync.test.js && node tests/source-integrity.test.js && node --test server/test/*.test.js",
     "server": "node server/src/index.js",
     "server:test": "node --test server/test/api.test.js"
   },

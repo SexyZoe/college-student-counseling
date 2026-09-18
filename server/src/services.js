@@ -11,6 +11,7 @@ const {
   tokenIdHash
 } = require("./security")
 const { createDataProtector } = require("./data-protection")
+const { createStudentAccountServices } = require("./student-account-service")
 const { createPersonnelImportServices } = require("./personnel-import-service")
 const scoringEngine = require("../../utils/scoring-engine")
 
@@ -62,7 +63,13 @@ function createServices(database, config, options) {
       displayName: user.display_name,
       studentId: user.student_no || "",
       staffId: user.staff_no || "",
-      classId: user.class_id || ""
+      classId: user.class_id || "",
+      profileCompleted: !!user.profile_completed,
+      mustChangePassword: !!user.must_change_password
+    }
+    if (user.role === "student" && user.class_id) {
+      const classroom = await database.prepare("SELECT name FROM classes WHERE id = ?").get(user.class_id)
+      result.className = classroom ? classroom.name : ""
     }
     if (user.role === "counselor") {
       const semester = await currentSemester()
@@ -141,7 +148,7 @@ function createServices(database, config, options) {
       throw new HttpError(401, "INVALID_TOKEN", "登录会话已失效")
     }
     const user = await database.prepare("SELECT * FROM users WHERE id = ? AND active = 1").get(payload.sub)
-    if (!user || user.role !== payload.role) throw new HttpError(401, "INVALID_TOKEN", "登录身份已失效")
+    if (!user || user.role !== payload.role || Number(user.auth_version || 0) !== Number(payload.ver || 0)) throw new HttpError(401, "INVALID_TOKEN", "登录身份已失效")
     return user
   }
 
@@ -509,6 +516,7 @@ function createServices(database, config, options) {
   }
 
   const personnelImports = createPersonnelImportServices(database, {
+    dataProtector:dataProtector,
     nowIso:nowIso,
     audit:audit,
     requireRole:requireRole
@@ -719,6 +727,8 @@ function createServices(database, config, options) {
   }
 
   return {
+    ...createStudentAccountServices(database, { requireRole, publicUser, audit, nowIso, dataProtector }),
+    getAccount: publicUser,
     checkReadiness,
     login,
     logout,

@@ -1,0 +1,11 @@
+.account-page { padding:32rpx; background:#faf7f2; min-height:100vh; box-sizing:border-box; }
+.card { padding:36rpx; border-radius:24rpx; background:white; }
+.title { display:block; font-size:38rpx; font-weight:600; color:#3b4a43; margin-bottom:28rpx; }
+.label { display:block; font-size:28rpx; margin:28rpx 0 14rpx; }
+.hint { display:block; font-size:25rpx; color:#637069; line-height:1.8; margin:16rpx 0; }
+input { background:#f5f7f5; padding:24rpx; border-radius:12rpx; font-size:28rpx; margin-bottom:16rpx; }
+checkbox-group { font-size:25rpx; line-height:1.8; }
+.link { display:block; color:#467b67; font-size:25rpx; margin:16rpx 0; }
+.error { display:block; color:#b23c49; font-size:26rpx; margin:20rpx 0; }
+button { margin-top:20rpx; font-size:28rpx; }
+.save { background:#8fc8b5; color:#203d31; }

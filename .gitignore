@@ -10,3 +10,5 @@ server/data/
 server/*.db
 server/*.db-shm
 server/*.db-wal
+backups/
+compose.override.yaml

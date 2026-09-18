@@ -1,0 +1,24 @@
+<view class="account-page">
+  <view class="card">
+    <text class="title">{{user.mustChangePassword ? '完善账号后开始使用' : '账号与个人资料'}}</text>
+    <view wx:if="{{user}}">
+      <text class="hint">账号：{{user.accountId}}</text>
+      <text wx:if="{{user.role === 'student'}}" class="hint">班级：{{user.className || user.classId}}（由管理员维护）</text>
+      <block wx:if="{{user.role === 'student'}}">
+        <text class="label">姓名</text>
+        <input value="{{displayName}}" data-field="displayName" bindinput="onInput" maxlength="50" placeholder="请自行填写姓名" disabled="{{loading}}" />
+        <text class="hint">姓名用于本人资料展示和授权辅导员的学生支持工作。班级、学号和手机号来自管理员导入的名单；姓名由你自行填写。</text>
+        <checkbox-group bindchange="onConsent"><label><checkbox value="agree" checked="{{consent}}" disabled="{{loading}}" />我已了解上述用途，同意保存本人填写的姓名</label></checkbox-group>
+        <text class="link" bindtap="viewPolicy">查看隐私与信息使用说明</text>
+      </block>
+      <text class="label">{{user.mustChangePassword ? '修改初始密码（必填）' : '修改密码（需要时填写）'}}</text>
+      <input password value="{{currentPassword}}" data-field="currentPassword" bindinput="onInput" maxlength="64" placeholder="原密码 / 初始密码" disabled="{{loading}}" />
+      <input password value="{{newPassword}}" data-field="newPassword" bindinput="onInput" maxlength="64" placeholder="新密码（8至64位）" disabled="{{loading}}" />
+      <input password value="{{confirmPassword}}" data-field="confirmPassword" bindinput="onInput" maxlength="64" placeholder="再次输入新密码" disabled="{{loading}}" />
+      <text class="hint">修改密码后需要重新登录。忘记密码请联系管理员；管理员将重置为登记手机号后6位。</text>
+    </view>
+    <text class="error" wx:if="{{error}}">{{error}}</text>
+    <button class="save" bindtap="save" loading="{{loading}}" disabled="{{loading || !user}}">保存</button>
+    <button bindtap="backToLogin" disabled="{{loading}}">返回登录</button>
+  </view>
+</view>

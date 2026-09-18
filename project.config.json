@@ -10,13 +10,13 @@
   "appid": "wx2cbcae136e0f74f2",
   "libVersion": "3.14.3",
   "setting": {
-    "es6": false,
+    "es6": true,
     "postcss": false,
     "compileWorklet": false,
     "minified": false,
     "uglifyFileName": false,
     "uploadWithSourceMap": true,
-    "enhance": false,
+    "enhance": true,
     "minifyWXSS": true,
     "minifyWXML": true,
     "localPlugins": false,
@@ -37,37 +37,43 @@
   "simulatorPluginLibVersion": {},
   "packOptions": {
     "ignore": [
+      { "value": "server", "type": "folder" },
+      { "value": "deploy", "type": "folder" },
+      { "value": "backups", "type": "folder" },
+      { "value": ".env", "type": "file" },
+      { "value": "compose.yaml", "type": "file" },
+      { "value": "compose.override.yaml", "type": "file" },
       {
-        "type": "folder",
-        "value": ".git"
+        "value": ".git",
+        "type": "folder"
       },
       {
-        "type": "folder",
-        "value": "docs"
+        "value": "docs",
+        "type": "folder"
       },
       {
-        "type": "folder",
-        "value": "tests"
+        "value": "tests",
+        "type": "folder"
       },
       {
-        "type": "file",
-        "value": ".DS_Store"
+        "value": ".DS_Store",
+        "type": "file"
       },
       {
-        "type": "file",
-        "value": ".gitignore"
+        "value": ".gitignore",
+        "type": "file"
       },
       {
-        "type": "file",
-        "value": "README.md"
+        "value": "README.md",
+        "type": "file"
       },
       {
-        "type": "file",
-        "value": "handoff.md"
+        "value": "handoff.md",
+        "type": "file"
       },
       {
-        "type": "file",
-        "value": "开发流程汇报.md"
+        "value": "开发流程汇报.md",
+        "type": "file"
       }
     ],
     "include": []

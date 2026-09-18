@@ -85,6 +85,7 @@ function issueToken(user, options) {
     sub: user.id,
     role: user.role,
     accountId: user.account_id,
+    ver: Number(user.auth_version || 0),
     iat: nowSeconds,
     exp: nowSeconds + options.ttlSeconds,
     jti: crypto.randomUUID()

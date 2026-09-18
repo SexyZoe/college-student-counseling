@@ -1,6 +1,7 @@
 const { HttpError } = require("./errors")
 const { inTransaction } = require("./database")
-const { normalizeRows, validateFormat, passwordRecord, fileHash, safeRow } = require("./personnel-import")
+const { parseCsv, normalizeRows, validateFormat, passwordRecord, fileHash, safeRow } = require("./personnel-import")
+const crypto = require("node:crypto")
 const { isDeepStrictEqual } = require("node:util")
 
 function createPersonnelImportServices(database, context) {
@@ -26,7 +27,9 @@ function createPersonnelImportServices(database, context) {
       return mapImportBatch(existing, true)
     }
 
-    const rows = normalizeRows(csvText)
+    const headers = parseCsv(csvText)[0] || []
+    const roster = input.format === "student-roster" || headers.some(value => ["班级", "手机号"].includes(value.trim()))
+    const rows = roster ? await rosterRows(csvText) : normalizeRows(csvText)
     const result = await buildPlan(rows)
     const status = result.errors.length ? "校验失败" : "待确认"
     const insert = await database.prepare(`
@@ -35,7 +38,7 @@ function createPersonnelImportServices(database, context) {
          unchanged_count, error_count, plan_json, errors_json, created_by_user_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      clientBatchId, fileName, hash, status, rows.length, result.counts.create,
+      clientBatchId, fileName, hash, status, roster ? rows.filter(row => row.type === "student").length : rows.length, result.counts.create,
       result.counts.update, result.counts.unchanged, result.errors.length,
       JSON.stringify({ items:result.items }), JSON.stringify(result.errors), user.id, nowIso()
     )
@@ -44,6 +47,33 @@ function createPersonnelImportServices(database, context) {
       fileName:fileName, status:status, totalRows:rows.length, errorCount:result.errors.length
     })
     return mapImportBatch(await database.prepare("SELECT * FROM import_batches WHERE id = ?").get(batchId), true)
+  }
+
+  async function rosterRows(csvText) {
+    const parsed = parseCsv(csvText)
+    if (JSON.stringify(parsed[0].map(value => value.trim())) !== JSON.stringify(["班级", "学号", "手机号"])) {
+      throw new HttpError(422, "IMPORT_HEADER_INVALID", "表头必须按顺序为：班级,学号,手机号（不含姓名列）")
+    }
+    if (parsed.length < 2) throw new HttpError(422, "IMPORT_EMPTY", "CSV 中没有学生数据")
+    if (parsed.length > 501) throw new HttpError(413, "IMPORT_TOO_MANY_ROWS", "单次最多导入500名学生")
+    if (!context.dataProtector.enabled) throw new HttpError(503, "PHONE_ENCRYPTION_REQUIRED", "请先配置服务器数据加密密钥")
+    const classes = new Map()
+    const rows = []
+    for (let index = 1; index < parsed.length; index++) {
+      if (parsed[index].length !== 3) throw new HttpError(422, "IMPORT_ROW_INVALID", "第" + (index + 1) + "行必须恰好为三列")
+      const [className, accountId, phone] = parsed[index].map(value => value.trim())
+      if (!className || className.length > 50) throw new HttpError(422, "IMPORT_CLASS_INVALID", "第" + (index + 1) + "行班级不能为空且最多50字")
+      if (!classes.has(className)) {
+        const matches = await database.prepare("SELECT * FROM classes WHERE name = ?").all(className)
+        if (matches.length > 1) throw new HttpError(409, "IMPORT_CLASS_AMBIGUOUS", "班级存在重名，请管理员先核实：" + className)
+        if (matches.length && !matches[0].active) throw new HttpError(409, "IMPORT_CLASS_INACTIVE", "班级已停用：" + className)
+        const classId = matches.length ? matches[0].id : "R" + crypto.createHash("sha256").update(className).digest("hex").slice(0, 24).toUpperCase()
+        classes.set(className, classId)
+        if (!matches.length) rows.push({ type:"class", rowNumber:index + 1, classId, className, major:"" })
+      }
+      rows.push({ type:"student", roster:true, rowNumber:index + 1, accountId:accountId.toLowerCase(), classId:classes.get(className), className, name:"", phone, password:phone.slice(-6) })
+    }
+    return rows
   }
 
   async function buildPlan(rows) {
@@ -124,7 +154,8 @@ function createPersonnelImportServices(database, context) {
     const existing = unique[0] || null
     if (existing && existing.role !== role) throw new HttpError(409, "IMPORT_ROLE_CONFLICT", "该账号已被其他角色使用")
     if (!existing && !row.password) throw new HttpError(422, "IMPORT_PASSWORD_REQUIRED", "新增账号必须填写至少 8 位初始密码")
-    const password = await passwordRecord(row)
+    // Re-imports update roster data, never reset a student's password or name.
+    const password = row.roster && existing ? null : await passwordRecord(row)
     const before = existing ? userSnapshot(existing) : null
     const id = before ? before.id : role + "-" + row.accountId
     const idOwner = await database.prepare("SELECT account_id FROM users WHERE id = ?").get(id)
@@ -135,16 +166,24 @@ function createPersonnelImportServices(database, context) {
       accountId:row.accountId,
       passwordHash:password ? password.hash : before.passwordHash,
       passwordSalt:password ? password.salt : before.passwordSalt,
-      displayName:row.name,
+      displayName:row.roster ? (before ? before.displayName : "") : row.name,
       studentNo:role === "student" ? row.accountId : null,
       staffNo:role === "counselor" ? row.accountId.toUpperCase() : null,
       classId:role === "student" ? row.classId : null,
       active:1,
-      createdAt:before ? before.createdAt : nowIso()
+      createdAt:before ? before.createdAt : nowIso(),
+      phoneEncrypted:before ? before.phoneEncrypted : null,
+      profileCompleted:before ? before.profileCompleted : (row.roster ? 0 : 1),
+      mustChangePassword:before ? before.mustChangePassword : (row.roster ? 1 : 0),
+      profileConsentAt:before ? before.profileConsentAt : null
+    }
+    if (row.roster) {
+      const oldPhone = before && before.phoneEncrypted ? context.dataProtector.unprotectText(before.phoneEncrypted, "student-phone:" + id) : ""
+      if (oldPhone !== row.phone) after.phoneEncrypted = context.dataProtector.protectText(row.phone, "student-phone:" + id)
     }
     const operation = before ? (same(before, after) ? "unchanged" : "update") : "create"
     return planItem(row, "user", row.accountId, operation, before, after,
-      (role === "student" ? "学生 " : "辅导员 ") + row.name)
+      (role === "student" ? "学生 " : "辅导员 ") + (row.roster ? row.accountId + " · " + row.className : row.name))
   }
 
   async function assignmentPlan(row) {
@@ -268,16 +307,20 @@ function createPersonnelImportServices(database, context) {
       if (item.operation === "create") {
         await database.prepare(`
           INSERT INTO users
-            (id, role, account_id, password_hash, password_salt, display_name, student_no, staff_no, class_id, active, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, role, account_id, password_hash, password_salt, display_name, student_no, staff_no, class_id, active, created_at,
+             phone_encrypted, profile_completed, must_change_password, profile_consent_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(value.id, value.role, value.accountId, value.passwordHash, value.passwordSalt, value.displayName,
-          value.studentNo, value.staffNo, value.classId, value.active, value.createdAt)
+          value.studentNo, value.staffNo, value.classId, value.active, value.createdAt,
+          value.phoneEncrypted || null, value.profileCompleted ?? 1, value.mustChangePassword ?? 0, value.profileConsentAt || null)
       } else {
         await database.prepare(`
           UPDATE users SET password_hash = ?, password_salt = ?, display_name = ?, student_no = ?,
-            staff_no = ?, class_id = ?, active = ? WHERE id = ?
+            staff_no = ?, class_id = ?, active = ?, phone_encrypted = ?, profile_completed = ?,
+            must_change_password = ?, profile_consent_at = ? WHERE id = ?
         `).run(value.passwordHash, value.passwordSalt, value.displayName, value.studentNo,
-          value.staffNo, value.classId, value.active, value.id)
+          value.staffNo, value.classId, value.active, value.phoneEncrypted || null,
+          value.profileCompleted ?? 1, value.mustChangePassword ?? 0, value.profileConsentAt || null, value.id)
       }
       return
     }
@@ -310,11 +353,12 @@ function createPersonnelImportServices(database, context) {
   async function listAdminStudents(user) {
     requireRole(user, "admin")
     return (await database.prepare(`
-      SELECT u.student_no, u.display_name, u.class_id, u.active, c.name AS class_name, c.major
+      SELECT u.student_no, u.display_name, u.class_id, u.active, u.phone_encrypted, u.profile_completed, u.must_change_password, c.name AS class_name, c.major
       FROM users u LEFT JOIN classes c ON c.id = u.class_id
       WHERE u.role = 'student' ORDER BY u.student_no
     `).all()).map(function(row) {
-      return { studentId:row.student_no, studentName:row.display_name, classId:row.class_id || "", className:row.class_name || "", major:row.major || "", active:!!row.active }
+      return { studentId:row.student_no, studentName:row.display_name, classId:row.class_id || "", className:row.class_name || "", major:row.major || "", active:!!row.active,
+        canResetPassword:!!row.phone_encrypted && !!row.active, profileCompleted:!!row.profile_completed, mustChangePassword:!!row.must_change_password }
     })
   }
 
@@ -386,7 +430,9 @@ function userSnapshot(row) {
   return {
     id:row.id, role:row.role, accountId:row.account_id, passwordHash:row.password_hash,
     passwordSalt:row.password_salt, displayName:row.display_name, studentNo:row.student_no,
-    staffNo:row.staff_no, classId:row.class_id, active:Number(row.active), createdAt:row.created_at
+    staffNo:row.staff_no, classId:row.class_id, active:Number(row.active), createdAt:row.created_at,
+    phoneEncrypted:row.phone_encrypted || null, profileCompleted:Number(row.profile_completed),
+    mustChangePassword:Number(row.must_change_password), profileConsentAt:row.profile_consent_at || null
   }
 }
 

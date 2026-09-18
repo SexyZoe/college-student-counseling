@@ -76,6 +76,9 @@ Page({
     }
 
     this.setData({ loading: true, loginError: "" })
+    if (apiClient.getSettings().enabled) {
+      return this.loginWithBackend()
+    }
     const result = auth.authenticate({
       role: this.data.role,
       accountId: this.data.accountId,
@@ -93,6 +96,39 @@ Page({
       return
     }
     this.finishLogin(account)
+  },
+
+  loginWithBackend() {
+    return apiClient.login({
+      role: this.data.role,
+      accountId: String(this.data.accountId || "").trim(),
+      password: this.data.password
+    }).then(result => {
+      const user = result.user
+      if (!user || !Object.prototype.hasOwnProperty.call(auth.ROLE_CONFIG, user.role) || user.role !== this.data.role || !user.accountId) {
+        apiClient.clearSession()
+        throw new Error("服务器返回的登录身份无效")
+      }
+      const account = Object.assign({}, user, {
+        nickName: user.displayName,
+        name: user.displayName,
+        studentName: user.role === "student" ? user.displayName : ""
+      })
+      wx.removeStorageSync("backendLastError")
+      if (user.role === "student" && (user.profileCompleted === false || user.mustChangePassword)) {
+        this.setData({ loading:false, password:"", verifiedAccount:null })
+        wx.reLaunch({ url:"/pages/account/settings" })
+        return
+      }
+      if (account.role === "student") {
+        this.setData({ loading:false, step:"bind", password:"", verifiedAccount:account, bindError:"" })
+      } else {
+        this.finishLogin(account)
+      }
+    }).catch(error => {
+      auth.clearSession("云端登录失败")
+      this.setData({ loading:false, step:"login", loginError:error.message || "云端登录失败，请重试" })
+    })
   },
 
   onBindWechat() {
@@ -127,12 +163,15 @@ Page({
 
   finishLogin(account) {
     try {
-      const backendCredentials = { role: account.role, accountId: account.accountId, password: this.data.password }
+      if (apiClient.getSettings().enabled) {
+        const remote = apiClient.getSession()
+        if (!remote || !remote.token || !Number.isFinite(remote.expiresAt) || remote.expiresAt <= Date.now() || !remote.user || remote.user.accountId !== account.accountId || remote.user.role !== account.role) {
+          throw new Error("云端会话失效")
+        }
+      }
       auth.createSession(account, { consentAt: new Date().toISOString() })
       if (apiClient.getSettings().enabled) {
-        apiClient.login(backendCredentials).then(function() {
-          return resultSync.flushPendingResults()
-        }).catch(function(error) {
+        resultSync.flushPendingResults().catch(function(error) {
           wx.setStorageSync("backendLastError", { code: error.code || "LOGIN_FAILED", message: error.message, time: Date.now() })
         })
       }
@@ -145,6 +184,7 @@ Page({
   },
 
   goBack() {
+    if (apiClient.getSettings().enabled) apiClient.clearSession()
     this.setData({
       step: "login",
       loading: false,

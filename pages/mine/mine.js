@@ -1,6 +1,7 @@
 // pages/mine/mine.js
 const util = require("../../utils/util")
 const auth = require("../../utils/auth")
+const apiClient = require("../../utils/api-client")
 
 Page({
   data: {
@@ -12,6 +13,7 @@ Page({
     editClassName: "",
     grades: ["大一", "大二", "大三", "大四", "研一", "研二", "研三", "博士"],
     menuItems: [
+      { icon: "setting-o", title: "账号资料与修改密码", path: "/pages/account/settings", color: "#8fc8b5" },
       { icon: "edit", title: "测评记录与趋势", path: "/pages/assessment/history?id=1", color: "#8fc8b5" },
       { icon: "star", title: "收藏文章", path: "/pages/article/list", color: "#f5d79e" },
       { icon: "smile-o", title: "16型人格探索", path: "/pages/personality/index", color: "#f7b7a0" },
@@ -46,6 +48,10 @@ Page({
   },
 
   onEditProfile() {
+    if (apiClient.getSettings().enabled) {
+      wx.navigateTo({ url:"/pages/account/settings" })
+      return
+    }
     const info = this.data.userInfo || {}
     this.setData({
       showEditPopup: true,

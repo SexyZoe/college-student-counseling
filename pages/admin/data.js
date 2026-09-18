@@ -10,6 +10,9 @@ Page({
     currentSemester: null,
     students: [],
     assignments: [],
+    assignmentClasses: [],
+    assignmentClassIndex: 0,
+    assignmentStaffId: "",
     importJobs: [],
     selectedBatch: null,
     semesterName: "",
@@ -53,6 +56,7 @@ Page({
         semesters:semesters,
         currentSemester:semesters.find(item => item.status === "当前学期") || null,
         students:results[1],
+        assignmentClasses:Array.from(new Map(results[1].filter(item => item.active && item.classId).map(item => [item.classId, { id:item.classId, name:item.className || item.classId }])).values()),
         assignments:results[2],
         importJobs:results[3],
         loading:false
@@ -64,6 +68,21 @@ Page({
   onSemesterName(e) { this.setData({ semesterName:e.detail.value }) },
   onStart(e) { this.setData({ startDate:e.detail.value }) },
   onEnd(e) { this.setData({ endDate:e.detail.value }) },
+  onAssignmentStaff(e) { this.setData({ assignmentStaffId:e.detail.value }) },
+  onAssignmentClass(e) { this.setData({ assignmentClassIndex:Number(e.detail.value) }) },
+  assignCounselor() {
+    if (this.data.loading || !this.requireBackend()) return
+    const classroom = this.data.assignmentClasses[this.data.assignmentClassIndex]
+    if (!classroom || !this.data.currentSemester || !this.data.assignmentStaffId.trim()) {
+      wx.showToast({ title:"请选择班级、填写工号并设置当前学期", icon:"none" }); return
+    }
+    this.setData({ loading:true })
+    apiClient.createCounselorAssignment({ classId:classroom.id, semesterId:this.data.currentSemester.id, staffId:this.data.assignmentStaffId.trim().toUpperCase() }).then(() => {
+      this.setData({ assignmentStaffId:"" })
+      this.loadRemoteData()
+      wx.showToast({ title:"班级已分配", icon:"success" })
+    }).catch(error => this.handleBackendError(error))
+  },
 
   createSemester() {
     const input = { name:this.data.semesterName, startDate:this.data.startDate, endDate:this.data.endDate }
@@ -113,11 +132,9 @@ Page({
 
   copyTemplate() {
     const template = [
-      "类型,账号,姓名,班级编号,班级名称,专业,学期编号,初始密码",
-      "班级,,,CS2501,计科2501,计算机科学与技术,,",
-      "学生,2025001,示例学生,CS2501,,,,ChangeMe123",
-      "辅导员,t002,示例辅导员,,,,,ChangeMe123",
-      "分配,t002,,CS2501,,,2026-1,"
+      "班级,学号,手机号",
+      "软件工程1班,20260001,13812345678",
+      "软件工程1班,20260002,13912345678"
     ].join("\n")
     wx.setClipboardData({ data:template, success:() => wx.showToast({ title:"CSV模板已复制", icon:"success" }) })
   },
@@ -145,7 +162,7 @@ Page({
   previewImport(fileName, csvText) {
     this.setData({ loading:true, selectedBatch:null })
     const clientBatchId = "client:import:" + Date.now() + ":" + Math.random().toString(36).slice(2, 10)
-    apiClient.previewPersonnelImport({ clientBatchId:clientBatchId, fileName:fileName, csvText:csvText }).then(batch => {
+    apiClient.previewPersonnelImport({ format:"student-roster", clientBatchId:clientBatchId, fileName:fileName, csvText:csvText }).then(batch => {
       this.setData({ loading:false, selectedBatch:batch })
       this.loadRemoteData()
       wx.showModal({
@@ -214,6 +231,25 @@ Page({
       showCancel:false
     })
     return false
+  },
+
+  resetStudentPassword(event) {
+    if (this.data.loading || !this.requireBackend()) return
+    const studentId = String(event.currentTarget.dataset.id)
+    const student = this.data.students.find(item => item.studentId === studentId)
+    if (!student || !student.canResetPassword) return
+    wx.showModal({
+      title:"重置学生密码",
+      content:"将学号 " + studentId + " 的密码重置为登记手机号后6位。现有登录将失效，下次登录须修改密码。",
+      success:result => {
+        if (!result.confirm) return
+        this.setData({ loading:true })
+        apiClient.resetStudentPassword(studentId).then(() => {
+          this.loadRemoteData()
+          wx.showToast({ title:"密码已重置", icon:"success" })
+        }).catch(error => this.handleBackendError(error))
+      }
+    })
   },
 
   handleBackendError(error) {

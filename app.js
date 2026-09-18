@@ -3,12 +3,20 @@ const auth = require("./utils/auth")
 const scoringEngine = require("./utils/scoring-engine")
 const semesterService = require("./utils/semester")
 const resultSync = require("./utils/result-sync")
+const apiClient = require("./utils/api-client")
 
 App({
   onLaunch() {
     this.migrateLocalData()
     this.initLocalDemoData()
     semesterService.ensureSemesterState()
+    if (apiClient.getSettings().enabled) {
+      const remote = apiClient.getSession()
+      const local = wx.getStorageSync("userInfo")
+      if (!remote || !remote.token || !Number.isFinite(remote.expiresAt) || remote.expiresAt <= Date.now() || !remote.user || !local || remote.user.accountId !== local.accountId || remote.user.role !== local.role) {
+        auth.clearSession("请重新登录云端服务")
+      }
+    }
     auth.restoreSession(this)
     resultSync.flushPendingResults().catch(function() {})
   },

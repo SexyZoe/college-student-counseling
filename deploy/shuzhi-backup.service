@@ -1,0 +1,9 @@
+[Unit]
+Description=Shuzhi MySQL encrypted backup
+After=docker.service
+Requires=docker.service
+[Service]
+Type=oneshot
+User=rgzntest1
+WorkingDirectory=/home/rgzntest1/shuzhi-heart-harbor
+ExecStart=/bin/bash /home/rgzntest1/shuzhi-heart-harbor/deploy/mysql-backup.sh

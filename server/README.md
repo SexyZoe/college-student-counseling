@@ -134,7 +134,7 @@ BASE_URL=http://127.0.0.1:8787 LOAD_PROFILE=health TOTAL_REQUESTS=2000 CONCURREN
 
 ## 让微信开发者工具连接后端
 
-先启动服务，然后在开发者工具调试控制台执行：
+当前前端默认连接校园实例 `http://172.18.132.12`，详见[校园云部署说明](../deploy/README.md)。要切换为本机后端，先启动服务，然后在开发者工具调试控制台执行：
 
 ```javascript
 wx.setStorageSync("backendApiBaseUrl", "http://127.0.0.1:8787")
