@@ -1,5 +1,6 @@
 // pages/article/list.js
 const util = require('../../utils/util')
+const apiClient = require('../../utils/api-client')
 
 Page({
   data: {
@@ -20,6 +21,18 @@ Page({
     const categories = ['全部'].concat(Array.from(new Set(list.map(item => item.category)))).concat(['我的收藏'])
     this.setData({ articles: list, categories })
     this.updateFilteredList()
+    if (apiClient.getSettings().enabled) {
+      apiClient.getPublishedContent("psychoeducation").then(items => {
+        const remote = items.map(item => Object.assign({}, item, {
+          author:item.authorName, reviewer:item.reviewerName, createTime:item.publishTime || item.createdAt,
+          updateTime:item.updatedAt, views:0,
+          cover:((item.media || []).find(media => media.kind === "image") || {}).url || "/images/articles/article_growth.png"
+        }))
+        wx.setStorageSync("articles", remote)
+        this.setData({ articles:remote, categories:['全部'].concat(Array.from(new Set(remote.map(item => item.category).filter(Boolean)))).concat(['我的收藏']) })
+        this.updateFilteredList()
+      }).catch(error => wx.setStorageSync("backendLastError", { code:error.code, message:error.message, time:Date.now() }))
+    }
   },
 
   getMockArticles() {

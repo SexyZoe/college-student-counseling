@@ -15,6 +15,9 @@ services:
       PORT: "8787"
       DATABASE_ENGINE: "sqlite"
       DATABASE_PATH: "/app/data/app.db"
+      UPLOAD_DIRECTORY: "/app/data/uploads"
+      MAX_MEDIA_BYTES: "104857600"
+      MEDIA_UPLOAD_TIMEOUT_MS: "300000"
       AUTH_SECRET: "${AUTH_SECRET:?请先复制 .env.compose.example 为 .env 并设置 AUTH_SECRET}"
       DATA_ENCRYPTION_KEY: "${DATA_ENCRYPTION_KEY:-}"
       DATA_ENCRYPTION_KEY_ID: "${DATA_ENCRYPTION_KEY_ID:-primary}"
@@ -66,6 +69,9 @@ services:
       MYSQL_CONNECTION_LIMIT: "${MYSQL_CONNECTION_LIMIT:-20}"
       MYSQL_IDLE_TIMEOUT_MS: "${MYSQL_IDLE_TIMEOUT_MS:-60000}"
       MYSQL_QUEUE_LIMIT: "${MYSQL_QUEUE_LIMIT:-1000}"
+      UPLOAD_DIRECTORY: "/app/data/uploads"
+      MAX_MEDIA_BYTES: "104857600"
+      MEDIA_UPLOAD_TIMEOUT_MS: "300000"
       AUTH_SECRET: "${AUTH_SECRET:?请先复制 .env.compose.example 为 .env 并设置 AUTH_SECRET}"
       DATA_ENCRYPTION_KEY: "${DATA_ENCRYPTION_KEY:-}"
       DATA_ENCRYPTION_KEY_ID: "${DATA_ENCRYPTION_KEY_ID:-primary}"
@@ -79,6 +85,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
+    volumes:
+      - media-uploads:/app/data/uploads
     cap_drop:
       - ALL
     security_opt:
@@ -143,3 +151,4 @@ services:
 volumes:
   backend-data:
   mysql-data:
+  media-uploads:

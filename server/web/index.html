@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#173f3b">
+  <title>数智心港湾 · 校园管理端</title>
+  <link rel="stylesheet" href="/web/styles.css">
+</head>
+<body>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <main id="root">
+    <section class="login-shell">
+      <div class="login-story">
+        <span class="eyebrow">校园心理健康云平台</span>
+        <h1>让每一次关注，<br>都能被妥善承接。</h1>
+        <p>管理员、辅导员与学生小程序共用同一套校园云数据。</p>
+        <div class="story-cards"><span>班级数据</span><span>风险跟进</span><span>内容共建</span></div>
+      </div>
+      <form id="login-form" class="login-card">
+        <div class="brand-mark">心</div>
+        <h2>欢迎回来</h2>
+        <p class="muted">请使用学校分配的账号登录</p>
+        <label>身份<select id="login-role"><option value="admin">管理员</option><option value="counselor">辅导员</option></select></label>
+        <label>账号<input id="login-account" autocomplete="username" required placeholder="请输入账号"></label>
+        <label>密码<input id="login-password" type="password" autocomplete="current-password" required placeholder="请输入密码"></label>
+        <button class="button primary wide" type="submit">登录管理端</button>
+        <p class="login-note">本系统仅供学校授权人员使用</p>
+      </form>
+    </section>
+  </main>
+  <script src="/web/app.js" defer></script>
+</body>
+</html>

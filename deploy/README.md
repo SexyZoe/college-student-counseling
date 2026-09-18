@@ -11,6 +11,8 @@
 | Nginx | `gateway` 容器 | 实例 80 端口，是否可达由校园网络决定 |
 | Node.js | `backend-mysql` 容器 | 容器网络和宿主机 `127.0.0.1:8787` |
 | MySQL 8.4 | `mysql` 容器 + `mysql-data` 卷 | 仅容器网络，没有发布宿主机数据库端口 |
+| Web 管理端 | Node.js 内置静态资源 | `http://172.18.132.12/web/` |
+| 文章媒体 | `media-uploads` 命名卷 | 通过 Nginx `/media/` 读取 |
 | 数据库迁移 | `mysql-migrate` 一次性容器 | 启动后端前执行 |
 
 `deploy/compose.cloud.yaml` 在实例安装为根目录 `compose.override.yaml`，由 Docker Compose 自动合并。它将 SQLite 服务改为手动选择的 profile，并为校园环境指定 `192.168.240.0/24` 容器网段。换一个网络环境部署前，仍应确认此网段不与实际路由冲突。
@@ -65,6 +67,8 @@ docker compose logs --tail 100 backend-mysql gateway
 bash deploy/deploy.sh
 ```
 
+管理员和辅导员在校园网内访问 `http://172.18.132.12/web/`。辅导员上传图片或视频时，Nginx 和后端均允许单文件最大 100MB。
+
 脚本校验 Compose、为运行中的 MySQL 备份、构建后端与迁移镜像、等待服务健康，然后检查网关就绪。不会删除数据卷。普通发布不会覆盖已有 `compose.override.yaml`；修改网关配置后应校验 Nginx 配置并重启网关，修改网络则需单独安排网络重建，不应当作普通应用发布处理。
 
 冒烟验证（使用演示账号，不输出令牌）：
@@ -83,7 +87,7 @@ bash deploy/mysql-backup.sh
 bash deploy/verify-restore.sh backups/上一步输出的文件名.sql.gz.enc
 ```
 
-备份流程：MySQL 一致性逻辑导出 → gzip → AES-256-CBC/PBKDF2 加密 → SHA-256 文件校验。校验和用于检测损坏，不等同于带认证加密。密钥在 `backups/.encryption-key`；数据和密钥都不进入 Git/小程序包。
+备份流程同时生成 MySQL 逻辑备份和文章媒体卷备份，两者都使用 AES-256-CBC/PBKDF2 加密并生成 SHA-256 校验文件。校验和用于检测损坏，不等同于带认证加密。密钥在 `backups/.encryption-key`；数据和密钥都不进入 Git/小程序包。`verify-restore.sh` 目前验证 MySQL 备份，媒体备份为 `media-*.tar.gz.enc`。
 
 恢复脚本在临时、无网络、内存数据盘的 MySQL 容器里验证导入，随后只删除该临时容器及其临时卷，不覆盖在线数据库。它验证可解密、可导入及表/迁移数据存在，不等同于所有业务语义均已验证。
 

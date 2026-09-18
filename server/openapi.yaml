@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 数智心港湾后端 API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     大学生心理健康支持小程序的后端接口。测评结果仅用于教育支持和人工复核，
     不构成医疗诊断。除健康检查外，业务接口使用 Bearer 令牌鉴权。
@@ -257,6 +257,31 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/counselor/media:
+    post:
+      tags: [Counselor]
+      summary: 上传文章图片或视频
+      description: 使用原始二进制请求体，X-File-Name 传递 URI 编码后的文件名。上传后须在 ContentSubmission.mediaIds 中引用。
+      parameters:
+        - in: header
+          name: X-File-Name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/png: { schema: { type: string, format: binary } }
+          image/gif: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+          video/mp4: { schema: { type: string, format: binary } }
+          video/webm: { schema: { type: string, format: binary } }
+          video/quicktime: { schema: { type: string, format: binary } }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { description: 文件超过上限 }
+        "415": { description: 媒体类型不支持 }
   /api/v1/admin/assessment-tasks:
     get:
       tags: [Admin]
@@ -576,6 +601,11 @@ components:
         category: { type: string, maxLength: 80 }
         summary: { type: string, maxLength: 500 }
         content: { type: string, maxLength: 20000 }
+        mediaIds:
+          type: array
+          maxItems: 9
+          uniqueItems: true
+          items: { type: string, format: uuid }
   responses:
     Success:
       description: 操作成功

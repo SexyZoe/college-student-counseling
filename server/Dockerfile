@@ -39,10 +39,11 @@ WORKDIR /app/server
 COPY --from=dependencies --chown=node:node /app/server/node_modules ./node_modules
 COPY --chown=node:node server/src ./src
 COPY --chown=node:node server/scripts ./scripts
+COPY --chown=node:node server/web ./web
 
 COPY --chown=node:node utils/scoring-engine.js /app/utils/scoring-engine.js
 
-RUN mkdir -p /app/data /app/backups \
+RUN mkdir -p /app/data /app/data/uploads /app/backups \
     && chown -R node:node /app \
     && rm -rf /usr/local/lib/node_modules/npm \
               /usr/local/lib/node_modules/corepack \

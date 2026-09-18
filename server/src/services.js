@@ -13,6 +13,7 @@ const {
 const { createDataProtector } = require("./data-protection")
 const { createStudentAccountServices } = require("./student-account-service")
 const { createPersonnelImportServices } = require("./personnel-import-service")
+const { createMediaServices } = require("./media-service")
 const scoringEngine = require("../../utils/scoring-engine")
 
 const ROLES = ["student", "counselor", "admin"]
@@ -43,6 +44,8 @@ function createServices(database, config, options) {
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(actorId || null, action, targetType || "", String(targetId || ""), JSON.stringify(details || {}), nowIso())
   }
+
+  const mediaServices = createMediaServices(database, config, { requireRole, audit, nowIso })
 
   async function currentSemester() {
     return await database.prepare("SELECT * FROM semesters WHERE status = '当前学期' LIMIT 1").get() || null
@@ -611,13 +614,18 @@ function createServices(database, config, options) {
     if (!content || content.length > 20000) throw new HttpError(422, "INVALID_CONTENT", "正文不能为空且最多20000个字符")
     if (summary.length > 500) throw new HttpError(422, "INVALID_CONTENT", "摘要最多500个字符")
     const timestamp = nowIso()
-    const insert = await database.prepare(`
-      INSERT INTO content_items
-        (type, title, category, summary, content, status, author_user_id, review_note, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, '待审核', ?, '', ?, ?)
-    `).run(type, title, category, summary, content, user.id, timestamp, timestamp)
-    const id = Number(insert.lastInsertRowid)
-    await audit(user.id, "提交内容审核", "content_item", id, { type:type, category:category })
+    let id
+    await inTransaction(database, async function() {
+      const insert = await database.prepare(`
+        INSERT INTO content_items
+          (type, title, category, summary, content, status, author_user_id, review_note, media_json, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, '待审核', ?, '', '[]', ?, ?)
+      `).run(type, title, category, summary, content, user.id, timestamp, timestamp)
+      id = Number(insert.lastInsertRowid)
+      const media = await mediaServices.claimContentMedia(user, input.mediaIds, id)
+      await database.prepare("UPDATE content_items SET media_json = ? WHERE id = ?").run(JSON.stringify(media), id)
+      await audit(user.id, "提交内容审核", "content_item", id, { type:type, category:category, mediaCount:media.length })
+    })
     return findContentItem(id)
   }
 
@@ -761,7 +769,9 @@ function createServices(database, config, options) {
     confirmImportBatch:personnelImports.confirmImportBatch,
     rollbackImportBatch:personnelImports.rollbackImportBatch,
     listAdminStudents:personnelImports.listAdminStudents,
-    listAdminAssignments:personnelImports.listAdminAssignments
+    listAdminAssignments:personnelImports.listAdminAssignments,
+    uploadContentMedia:mediaServices.uploadContentMedia,
+    getPublishedMedia:mediaServices.getPublishedMedia
   }
 }
 
@@ -881,6 +891,7 @@ function mapContentItem(row) {
     category:row.category,
     summary:row.summary,
     content:row.content,
+    media:safeJson(row.media_json, []),
     status:row.status,
     authorName:row.author_name,
     reviewerName:row.reviewer_name || "",

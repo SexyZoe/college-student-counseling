@@ -81,6 +81,9 @@
 .article-content strong {
   color: #f4a3a8;
 }
+.article-media-list { margin:20rpx 30rpx; display:flex; flex-direction:column; gap:18rpx; }
+.uploaded-media,.uploaded-video { width:100%; border-radius:18rpx; background:#eef1ef; }
+.uploaded-video { height:400rpx; }
 
 /* 操作按钮 */
 .action-bar {

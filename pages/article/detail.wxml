@@ -27,6 +27,13 @@
     </block>
   </view>
 
+  <view class="article-media-list" wx:if="{{article.media.length}}">
+    <block wx:for="{{article.media}}" wx:key="id">
+      <image wx:if="{{item.kind === 'image'}}" class="uploaded-media" src="{{item.url}}" mode="widthFix" show-menu-by-longpress />
+      <video wx:else class="uploaded-video" src="{{item.url}}" controls object-fit="contain" />
+    </block>
+  </view>
+
   <van-divider content="— 感谢阅读 —"/>
 
   <view class="action-bar">
