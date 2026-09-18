@@ -15,14 +15,14 @@
       <view class="input-label">{{accountLabel}}</view>
       <view class="input-wrapper">
         <van-icon name="user-o" size="18px" color="#999" />
-        <input class="login-input" type="text" placeholder="{{accountPlaceholder}}" value="{{accountId}}" bindinput="onAccountInput" maxlength="20" disabled="{{loading}}" confirm-type="next" />
+        <input class="login-input" type="text" placeholder="{{accountPlaceholder}}" value="{{accountId}}" bindinput="onAccountInput" maxlength="32" disabled="{{loading}}" confirm-type="next" />
       </view>
     </view>
     <view class="input-group">
       <view class="input-label">独立密码</view>
       <view class="input-wrapper">
         <van-icon name="lock" size="18px" color="#999" />
-        <input class="login-input" type="text" password="{{!showPassword}}" placeholder="请输入本系统独立密码" value="{{password}}" bindinput="onPasswordInput" bindconfirm="onLogin" maxlength="32" disabled="{{loading}}" confirm-type="done" />
+        <input class="login-input" type="text" password="{{!showPassword}}" placeholder="请输入本系统独立密码" value="{{password}}" bindinput="onPasswordInput" bindconfirm="onLogin" maxlength="64" disabled="{{loading}}" confirm-type="done" />
         <view class="password-toggle" bindtap="togglePassword" aria-label="{{showPassword ? '隐藏密码' : '显示密码'}}">
           <van-icon name="{{showPassword ? 'eye-o' : 'closed-eye'}}" size="18px" color="#999" />
         </view>
@@ -37,6 +37,7 @@
 
     <view class="error-msg" wx:if="{{loginError}}" role="alert">{{loginError}}</view>
     <view class="login-btn {{loading ? 'loading' : ''}}" bindtap="onLogin">{{loading ? '验证中…' : '登录'}}</view>
+    <view class="role-description" wx:if="{{role === 'student'}}">名单导入账号使用学号登录，初始密码为登记手机号后6位。忘记密码请联系管理员人工重置。</view>
 
     <view class="demo-accounts">
       <text class="demo-title">本地演示账号（密码均为 123456）</text>

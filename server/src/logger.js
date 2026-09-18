@@ -1,5 +1,5 @@
 const LEVELS = { debug:10, info:20, warn:30, error:40 }
-const REDACTED_KEYS = /password|secret|token|authorization|answer|followup|cookie|encryption/i
+const REDACTED_KEYS = /password|secret|token|authorization|answer|followup|cookie|encryption|phone|csvText/i
 
 function sanitize(value, depth) {
   if (depth > 4) return "[MAX_DEPTH]"

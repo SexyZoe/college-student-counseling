@@ -32,11 +32,20 @@
   <view wx:if="{{activeTab === '学生'}}" class="section">
     <view class="notice">共 {{students.length}} 名学生；停用账号保留历史测评归属，但不能继续登录。</view>
     <view class="list-card" wx:for="{{students}}" wx:key="studentId">
-      <view class="card-main"><text class="card-title">{{item.studentName}}　{{item.studentId}}</text><view class="card-meta"><text>{{item.className || item.classId}}</text><text>{{item.major}}</text><text>{{item.active === false ? '已停用' : '正常'}}</text></view></view>
+      <view class="card-main"><text class="card-title">{{item.studentName || '待学生填写姓名'}}　{{item.studentId}}</text><view class="card-meta"><text>{{item.className || item.classId}}</text><text>{{item.major}}</text><text>{{item.active === false ? '已停用' : (item.mustChangePassword ? '待修改初始密码' : '正常')}}</text></view></view>
+      <view wx:if="{{backendReady && item.canResetPassword}}" class="status-action" data-id="{{item.studentId}}" bindtap="resetStudentPassword">重置密码</view>
     </view>
   </view>
 
   <view wx:if="{{activeTab === '分配'}}" class="section">
+    <view class="form-card" wx:if="{{backendReady}}">
+      <text class="form-label">当前学期：{{currentSemester.name || '请先设置当前学期'}}</text>
+      <text class="form-label">已导入学生的班级</text>
+      <picker range="{{assignmentClasses}}" range-key="name" value="{{assignmentClassIndex}}" bindchange="onAssignmentClass"><view class="form-input">{{assignmentClasses[assignmentClassIndex].name || '暂无班级，请先导入名单'}}</view></picker>
+      <text class="form-label">辅导员工号（账号须已存在）</text>
+      <input class="form-input" value="{{assignmentStaffId}}" bindinput="onAssignmentStaff" placeholder="例如 T001" maxlength="32" />
+      <view class="primary-btn admin-btn" bindtap="assignCounselor">分配到当前学期</view>
+    </view>
     <view class="panel" wx:for="{{assignments}}" wx:key="key">
       <text class="card-title">{{item.counselorName}}（{{item.staffId}}）</text>
       <view class="card-meta"><text>{{item.className}}（{{item.classId}}）</text><text>{{item.semesterName}}</text><text>{{item.active ? '有效' : '已撤销'}}</text></view>
@@ -45,7 +54,7 @@
   </view>
 
   <view wx:if="{{activeTab === '导入'}}">
-    <view class="notice">稳定格式为 CSV，单批最多 500 行、512KB。流程为预检差异 → 管理员确认 → 单事务写入 → 可审计整批回滚。</view>
+    <view class="notice">CSV 列顺序固定为：班级、学号、手机号，不含姓名。最多500名学生、512KB，请保存为 UTF-8 CSV，并将学号、手机号设为文本保留前导零。新账号初始密码为手机号后6位；重复导入保留学生已修改的密码和已填写的姓名。</view>
     <view class="import-actions">
       <view class="secondary-btn" bindtap="copyTemplate">复制 CSV 模板</view>
       <view class="primary-btn admin-btn" bindtap="chooseImport">选择 CSV 文件</view>

@@ -56,7 +56,14 @@ async function test(name, callback) {
 }
 
 ;(async function() {
-  await test("后端默认关闭，不会产生意外网络请求", async function() {
+  await test("默认使用校园云配置，读取配置不发请求", async function() {
+    assert.strictEqual(apiClient.getSettings().enabled, true)
+    assert.strictEqual(apiClient.getSettings().baseUrl, "http://172.18.132.12")
+    assert.strictEqual(calls.length, 0)
+  })
+
+  await test("显式关闭后端后，不会产生网络请求", async function() {
+    apiClient.configure({ enabled:false })
     await assert.rejects(apiClient.getAssessmentTasks(), error => error.code === "BACKEND_DISABLED")
     assert.strictEqual(calls.length, 0)
   })

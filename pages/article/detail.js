@@ -1,4 +1,4 @@
-﻿// pages/article/detail.js
+// pages/article/detail.js
 const util = require('../../utils/util')
 
 const categoryColors = {

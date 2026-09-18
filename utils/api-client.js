@@ -1,7 +1,8 @@
 const API_BASE_URL_KEY = "backendApiBaseUrl"
 const API_ENABLED_KEY = "backendSyncEnabled"
 const BACKEND_SESSION_KEY = "backendSession"
-const DEFAULT_BASE_URL = "http://127.0.0.1:8787"
+const deployment = require("./deployment-config")
+const DEFAULT_BASE_URL = deployment.baseUrl
 
 function BackendError(status, code, message, details) {
   this.name = "BackendError"
@@ -14,8 +15,9 @@ BackendError.prototype = Object.create(Error.prototype)
 BackendError.prototype.constructor = BackendError
 
 function getSettings() {
+  const enabled = wx.getStorageSync(API_ENABLED_KEY)
   return {
-    enabled: wx.getStorageSync(API_ENABLED_KEY) === true,
+    enabled: typeof enabled === "boolean" ? enabled : deployment.enabled,
     baseUrl: String(wx.getStorageSync(API_BASE_URL_KEY) || DEFAULT_BASE_URL).replace(/\/$/, "")
   }
 }
@@ -57,6 +59,7 @@ function request(options) {
           return
         }
         const error = body.error || {}
+        if (error.code === "ACCOUNT_SETUP_REQUIRED") wx.reLaunch({ url:"/pages/account/settings" })
         if (response.statusCode === 401 && options.auth !== false) clearSession()
         reject(new BackendError(response.statusCode, error.code, error.message, error.details))
       },
@@ -69,6 +72,10 @@ function request(options) {
 
 function login(credentials) {
   return request({ path: "/api/v1/auth/login", method: "POST", data: credentials, auth: false }).then(function(result) {
+    if (!result || typeof result.token !== "string" || !result.token || !Number.isFinite(result.expiresIn) || result.expiresIn <= 0 || !result.user) {
+      clearSession()
+      throw new BackendError(502, "INVALID_SESSION", "服务器返回的登录会话无效")
+    }
     wx.setStorageSync(BACKEND_SESSION_KEY, {
       token: result.token,
       expiresAt: Date.now() + result.expiresIn * 1000,
@@ -196,6 +203,11 @@ function getAdminAuditLogs(limit) {
 }
 
 module.exports = {
+  createCounselorAssignment:function(data) { return request({ path:"/api/v1/admin/counselor-assignments", method:"POST", data:data }) },
+  getAccount:function() { return request({ path:"/api/v1/account" }) },
+  updateStudentProfile:function(data) { return request({ path:"/api/v1/account/profile", method:"PATCH", data:data }) },
+  changePassword:function(data) { return request({ path:"/api/v1/account/password", method:"POST", data:data }) },
+  resetStudentPassword:function(studentId) { return request({ path:"/api/v1/admin/students/" + encodeURIComponent(studentId) + "/reset-password", method:"POST", data:{} }) },
   API_BASE_URL_KEY: API_BASE_URL_KEY,
   API_ENABLED_KEY: API_ENABLED_KEY,
   BACKEND_SESSION_KEY: BACKEND_SESSION_KEY,

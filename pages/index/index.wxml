@@ -1,4 +1,4 @@
-﻿<!-- pages/index/index.wxml -->
+<!-- pages/index/index.wxml -->
 <view class="container">
   <!-- 隐私提示横幅 -->
   <view class="privacy-banner" wx:if="{{showPrivacy}}">

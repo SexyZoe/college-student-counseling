@@ -1,0 +1,5 @@
+ALTER TABLE users ADD COLUMN phone_encrypted TEXT;
+ALTER TABLE users ADD COLUMN profile_completed INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN profile_consent_at TEXT;
+ALTER TABLE users ADD COLUMN auth_version INTEGER NOT NULL DEFAULT 0;

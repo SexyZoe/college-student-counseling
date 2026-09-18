@@ -52,6 +52,23 @@ function createHttpApp(services, config, options) {
       }
 
       const user = await services.authenticate(readBearerToken(request))
+      if (request.method === "GET" && path === "/api/v1/account") {
+        return sendOk(response, await services.getAccount(user))
+      }
+      if (request.method === "PATCH" && path === "/api/v1/account/profile") {
+        return sendOk(response, await services.updateStudentProfile(user, await readJson(request, config.maxBodyBytes)))
+      }
+      if (request.method === "POST" && path === "/api/v1/account/password") {
+        enforceRateLimit(limiter, response, "password:" + user.id, 5)
+        return sendOk(response, await services.changePassword(user, await readJson(request, config.maxBodyBytes)))
+      }
+      if (user.role === "student" && (!user.profile_completed || user.must_change_password)) {
+        throw new HttpError(403, "ACCOUNT_SETUP_REQUIRED", "请先填写姓名并修改初始密码")
+      }
+      const resetMatch = path.match(/^\/api\/v1\/admin\/students\/([^/]+)\/reset-password$/)
+      if (request.method === "POST" && resetMatch) {
+        return sendOk(response, await services.resetStudentPassword(user, decodeURIComponent(resetMatch[1])))
+      }
       if (request.method === "GET" && path === "/api/v1/semesters/current") {
         return sendOk(response, await services.getCurrentSemester())
       }

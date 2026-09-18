@@ -15,6 +15,56 @@ tags:
   - name: Counselor
   - name: Admin
 paths:
+  /api/v1/account:
+    get:
+      tags: [Authentication]
+      summary: 获取本人账号与首次完善状态
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+  /api/v1/account/profile:
+    patch:
+      tags: [Student]
+      summary: 学生填写姓名并同意信息用途（不允许修改班级和学号）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [displayName, consent]
+              properties:
+                displayName: { type: string, minLength: 1, maxLength: 50 }
+                consent: { type: boolean, const: true }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+  /api/v1/account/password:
+    post:
+      tags: [Authentication]
+      summary: 验证原密码并修改密码，撤销现有会话
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 8, maxLength: 64 }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+  /api/v1/admin/students/{studentId}/reset-password:
+    post:
+      tags: [Admin]
+      summary: 重置为登记手机号后6位并撤销旧会话
+      parameters:
+        - in: path
+          name: studentId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
   /health:
     get:
       tags: [Operations]

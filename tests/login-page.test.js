@@ -31,6 +31,7 @@ function createPage() {
 
 function reset() {
   Object.keys(storage).forEach(key => delete storage[key])
+  storage.backendSyncEnabled = false
   Object.keys(calls).forEach(key => { calls[key].length = 0 })
   app.globalData = {}
 }
