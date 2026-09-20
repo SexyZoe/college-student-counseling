@@ -115,7 +115,7 @@ Page({
         studentName: user.role === "student" ? user.displayName : ""
       })
       wx.removeStorageSync("backendLastError")
-      if (user.role === "student" && (user.profileCompleted === false || user.mustChangePassword)) {
+      if (user.mustChangePassword || (user.role === "student" && user.profileCompleted === false)) {
         this.setData({ loading:false, password:"", verifiedAccount:null })
         wx.reLaunch({ url:"/pages/account/settings" })
         return

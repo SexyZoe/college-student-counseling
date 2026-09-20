@@ -15,7 +15,7 @@
       <input password value="{{currentPassword}}" data-field="currentPassword" bindinput="onInput" maxlength="64" placeholder="原密码 / 初始密码" disabled="{{loading}}" />
       <input password value="{{newPassword}}" data-field="newPassword" bindinput="onInput" maxlength="64" placeholder="新密码（8至64位）" disabled="{{loading}}" />
       <input password value="{{confirmPassword}}" data-field="confirmPassword" bindinput="onInput" maxlength="64" placeholder="再次输入新密码" disabled="{{loading}}" />
-      <text class="hint">修改密码后需要重新登录。忘记密码请联系管理员；管理员将重置为登记手机号后6位。</text>
+      <text class="hint">修改密码后需要重新登录。学生忘记密码请联系管理员，重置为登记手机号后4位；辅导员重置后的临时密码为123456。</text>
     </view>
     <text class="error" wx:if="{{error}}">{{error}}</text>
     <button class="save" bindtap="save" loading="{{loading}}" disabled="{{loading || !user}}">保存</button>

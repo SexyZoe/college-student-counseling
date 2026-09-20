@@ -62,11 +62,19 @@ function dateOffset(days) {
 
 async function main() {
   const studentToken = await login("student", "2024001")
-  const counselorToken = await login("counselor", "T001")
   const adminToken = await login("admin", "admin")
+  let response = await json("/api/v1/admin/counselors/T001/reset-password", "POST", adminToken, {})
+  assert.equal(response.status, 200)
+  const temporaryCounselorToken = await login("counselor", "T001", "123456")
+  const counselorPassword = "ContractCounselor" + suffix
+  response = await json("/api/v1/account/password", "POST", temporaryCounselorToken, {
+    currentPassword:"123456", newPassword:counselorPassword
+  })
+  assert.equal(response.status, 200)
+  const counselorToken = await login("counselor", "T001", counselorPassword)
 
   const semesterId = "contract-sem-" + suffix
-  let response = await json("/api/v1/admin/semesters", "POST", adminToken, {
+  response = await json("/api/v1/admin/semesters", "POST", adminToken, {
     id:semesterId,
     name:"契约测试学期 " + suffix,
     startDate:dateOffset(-1),
@@ -156,8 +164,10 @@ async function main() {
 
   response = await json("/api/v1/admin/semesters/2026-1/current", "PATCH", adminToken, {})
   assert.equal(response.status, 200)
+  response = await json("/api/v1/admin/counselors/T001/reset-password", "POST", adminToken, {})
+  assert.equal(response.status, 200)
 
-  console.log("运行时契约测试通过：测评、风险、任务、内容、人员导入回滚和审计闭环均正常")
+  console.log("运行时契约测试通过：强制改密、测评、风险、任务、内容、人员导入回滚和审计闭环均正常")
 }
 
 main().catch(function(error) {

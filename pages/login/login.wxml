@@ -37,7 +37,8 @@
 
     <view class="error-msg" wx:if="{{loginError}}" role="alert">{{loginError}}</view>
     <view class="login-btn {{loading ? 'loading' : ''}}" bindtap="onLogin">{{loading ? '验证中…' : '登录'}}</view>
-    <view class="role-description" wx:if="{{role === 'student'}}">名单导入账号使用学号登录，初始密码为登记手机号后6位。忘记密码请联系管理员人工重置。</view>
+    <view class="role-description" wx:if="{{role === 'student'}}">名单导入账号使用学号登录，临时密码为登记手机号后4位。首次登录必须修改密码。</view>
+    <view class="role-description" wx:if="{{role === 'counselor'}}">辅导员账号由管理员创建，临时密码为 123456。首次登录必须修改密码。</view>
 
     <view class="demo-accounts">
       <text class="demo-title">本地演示账号（密码均为 123456）</text>

@@ -115,10 +115,11 @@ test("人员数据导入、确认与整批回滚", async function(t) {
 
   await t.test("导入账号使用摘要密码并可以正常登录", async function() {
     const student = await login("student", "2025001", "StudentPass123")
-    const counselor = await login("counselor", "t002", "CounselorPass123")
+    const counselor = await login("counselor", "t002", "123456")
     assert.equal(student.status, 200)
     assert.equal(student.body.data.user.classId, "CS2501")
     assert.equal(counselor.status, 200)
+    assert.equal(counselor.body.data.user.mustChangePassword, true)
     assert.deepEqual(counselor.body.data.user.classIds, ["CS2501"])
   })
 

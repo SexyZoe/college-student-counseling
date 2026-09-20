@@ -74,7 +74,10 @@ function createHttpApp(services, config, options) {
         enforceRateLimit(limiter, response, "password:" + user.id, 5)
         return sendOk(response, await services.changePassword(user, await readJson(request, config.maxBodyBytes)))
       }
-      if (user.role === "student" && (!user.profile_completed || user.must_change_password)) {
+      if (user.must_change_password) {
+        throw new HttpError(403, "PASSWORD_CHANGE_REQUIRED", "请先修改临时密码")
+      }
+      if (user.role === "student" && !user.profile_completed) {
         throw new HttpError(403, "ACCOUNT_SETUP_REQUIRED", "请先填写姓名并修改初始密码")
       }
       const resetMatch = path.match(/^\/api\/v1\/admin\/students\/([^/]+)\/reset-password$/)
@@ -140,6 +143,26 @@ function createHttpApp(services, config, options) {
       }
       if (request.method === "POST" && path === "/api/v1/admin/counselor-assignments") {
         return sendOk(response, await services.createCounselorAssignment(user, await readJson(request, config.maxBodyBytes)), 201)
+      }
+      if (request.method === "PATCH" && path === "/api/v1/admin/counselor-assignments") {
+        return sendOk(response, await services.revokeCounselorAssignment(user, await readJson(request, config.maxBodyBytes)))
+      }
+      if (request.method === "GET" && path === "/api/v1/admin/counselors") {
+        return sendOk(response, await services.listAdminCounselors(user))
+      }
+      if (request.method === "POST" && path === "/api/v1/admin/counselors") {
+        return sendOk(response, await services.createAdminCounselor(user, await readJson(request, config.maxBodyBytes)), 201)
+      }
+      const counselorResetMatch = path.match(/^\/api\/v1\/admin\/counselors\/([^/]+)\/reset-password$/)
+      if (request.method === "POST" && counselorResetMatch) {
+        return sendOk(response, await services.resetCounselorPassword(user, decodeURIComponent(counselorResetMatch[1])))
+      }
+      const counselorStatusMatch = path.match(/^\/api\/v1\/admin\/counselors\/([^/]+)\/status$/)
+      if (request.method === "PATCH" && counselorStatusMatch) {
+        return sendOk(response, await services.setCounselorStatus(user, decodeURIComponent(counselorStatusMatch[1]), await readJson(request, config.maxBodyBytes)))
+      }
+      if (request.method === "GET" && path === "/api/v1/admin/classes") {
+        return sendOk(response, await services.listAdminClasses(user, url.searchParams.get("semesterId") || ""))
       }
       if (request.method === "GET" && path === "/api/v1/admin/students") {
         return sendOk(response, await services.listAdminStudents(user))
@@ -222,7 +245,7 @@ function routeLabel(pathname) {
   return String(pathname || "/")
     .replace(/\/$/, "")
     .replace(/\/media\/[^/]+/g, "/media/:id")
-    .replace(/\/(classes|risk-events|students|semesters|import-batches)\/[^/]+/g, "/$1/:id") || "/"
+    .replace(/\/(classes|risk-events|students|counselors|semesters|import-batches)\/[^/]+/g, "/$1/:id") || "/"
 }
 
 function enforceRateLimit(limiter, response, key, limit) {

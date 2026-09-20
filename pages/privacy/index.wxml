@@ -5,7 +5,7 @@
   </view>
   <view class="policy-card">
     <text class="policy-title">我们处理哪些信息</text>
-    <text class="policy-text">管理员导入班级、学号和手机号用于创建账号、确定班级归属和人工重置密码；初始密码为登记手机号后6位。姓名由学生登录后自行填写并确认用途。系统还处理测评回答、结果、风险提示和必要的跟进记录。不会收集通讯录、精确位置等无关信息。</text>
+    <text class="policy-text">管理员导入班级、学号和手机号用于创建账号、确定班级归属和人工重置密码；临时密码为登记手机号后4位。姓名由学生登录后自行填写并确认用途。系统还处理测评回答、结果、风险提示和必要的跟进记录。不会收集通讯录、精确位置等无关信息。</text>
   </view>
   <view class="policy-card">
     <text class="policy-title">使用目的与访问范围</text>

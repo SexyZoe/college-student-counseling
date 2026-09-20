@@ -54,7 +54,7 @@
   </view>
 
   <view wx:if="{{activeTab === '导入'}}">
-    <view class="notice">CSV 列顺序固定为：班级、学号、手机号，不含姓名。最多500名学生、512KB，请保存为 UTF-8 CSV，并将学号、手机号设为文本保留前导零。新账号初始密码为手机号后6位；重复导入保留学生已修改的密码和已填写的姓名。</view>
+    <view class="notice">CSV 列顺序固定为：班级、学号、手机号，不含姓名。最多500名学生、512KB，请保存为 UTF-8 CSV，并将学号、手机号设为文本保留前导零。新账号临时密码为手机号后4位，首次登录强制修改；重复导入保留学生已修改的密码和已填写的姓名。</view>
     <view class="import-actions">
       <view class="secondary-btn" bindtap="copyTemplate">复制 CSV 模板</view>
       <view class="primary-btn admin-btn" bindtap="chooseImport">选择 CSV 文件</view>

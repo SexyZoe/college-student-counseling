@@ -240,7 +240,7 @@ Page({
     if (!student || !student.canResetPassword) return
     wx.showModal({
       title:"重置学生密码",
-      content:"将学号 " + studentId + " 的密码重置为登记手机号后6位。现有登录将失效，下次登录须修改密码。",
+      content:"将学号 " + studentId + " 的密码重置为登记手机号后4位。现有登录将失效，下次登录须修改密码。",
       success:result => {
         if (!result.confirm) return
         this.setData({ loading:true })

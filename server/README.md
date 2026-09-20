@@ -167,6 +167,10 @@ wx.setStorageSync("backendSyncEnabled", false)
 | GET/POST | `/api/v1/admin/semesters` | 管理员 | 查询、创建学期 |
 | PATCH | `/api/v1/admin/semesters/:id/current` | 管理员 | 切换当前学期 |
 | POST | `/api/v1/admin/counselor-assignments` | 管理员 | 按学期分配辅导员班级权限 |
+| PATCH | `/api/v1/admin/counselor-assignments` | 管理员 | 撤销辅导员班级分配 |
+| GET/POST | `/api/v1/admin/counselors` | 管理员 | 查询、创建辅导员账号 |
+| POST/PATCH | `/api/v1/admin/counselors/:id/reset-password`、`/status` | 管理员 | 重置临时密码、启停账号 |
+| GET | `/api/v1/admin/classes` | 管理员 | 按学期查询班级分配状态 |
 | GET | `/api/v1/admin/students` | 管理员 | 查询学生和班级基础信息 |
 | GET | `/api/v1/admin/counselor-assignments` | 管理员 | 查询辅导员分配关系 |
 | GET | `/api/v1/admin/import-batches` | 管理员 | 查询最近导入批次 |

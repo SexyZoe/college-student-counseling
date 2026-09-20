@@ -216,6 +216,12 @@ function getAdminAuditLogs(limit) {
 
 module.exports = {
   createCounselorAssignment:function(data) { return request({ path:"/api/v1/admin/counselor-assignments", method:"POST", data:data }) },
+  revokeCounselorAssignment:function(data) { return request({ path:"/api/v1/admin/counselor-assignments", method:"PATCH", data:data }) },
+  getAdminCounselors:function() { return request({ path:"/api/v1/admin/counselors" }) },
+  createAdminCounselor:function(data) { return request({ path:"/api/v1/admin/counselors", method:"POST", data:data }) },
+  resetCounselorPassword:function(staffId) { return request({ path:"/api/v1/admin/counselors/" + encodeURIComponent(staffId) + "/reset-password", method:"POST", data:{} }) },
+  setCounselorStatus:function(staffId, active) { return request({ path:"/api/v1/admin/counselors/" + encodeURIComponent(staffId) + "/status", method:"PATCH", data:{ active:!!active } }) },
+  getAdminClasses:function(semesterId) { return request({ path:"/api/v1/admin/classes" + (semesterId ? "?semesterId=" + encodeURIComponent(semesterId) : "") }) },
   getAccount:function() { return request({ path:"/api/v1/account" }) },
   updateStudentProfile:function(data) { return request({ path:"/api/v1/account/profile", method:"PATCH", data:data }) },
   changePassword:function(data) { return request({ path:"/api/v1/account/password", method:"POST", data:data }) },
