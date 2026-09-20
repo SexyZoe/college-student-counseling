@@ -71,7 +71,7 @@ function createPersonnelImportServices(database, context) {
         classes.set(className, classId)
         if (!matches.length) rows.push({ type:"class", rowNumber:index + 1, classId, className, major:"" })
       }
-      rows.push({ type:"student", roster:true, rowNumber:index + 1, accountId:accountId.toLowerCase(), classId:classes.get(className), className, name:"", phone, password:phone.slice(-6) })
+      rows.push({ type:"student", roster:true, rowNumber:index + 1, accountId:accountId.toLowerCase(), classId:classes.get(className), className, name:"", phone, password:phone.slice(-4) })
     }
     return rows
   }
@@ -153,9 +153,9 @@ function createPersonnelImportServices(database, context) {
     if (unique.length > 1) throw new HttpError(409, "IMPORT_IDENTITY_CONFLICT", "账号与学工号分别属于不同用户")
     const existing = unique[0] || null
     if (existing && existing.role !== role) throw new HttpError(409, "IMPORT_ROLE_CONFLICT", "该账号已被其他角色使用")
-    if (!existing && !row.password) throw new HttpError(422, "IMPORT_PASSWORD_REQUIRED", "新增账号必须填写至少 8 位初始密码")
-    // Re-imports update roster data, never reset a student's password or name.
-    const password = row.roster && existing ? null : await passwordRecord(row)
+    if (!existing && role === "student" && !row.password) throw new HttpError(422, "IMPORT_PASSWORD_REQUIRED", "新增学生账号必须填写初始密码")
+    // Imports never reset existing passwords. New counselor accounts always use the centrally managed temporary password.
+    const password = existing ? null : await passwordRecord(role === "counselor" ? Object.assign({}, row, { password:"123456" }) : row)
     const before = existing ? userSnapshot(existing) : null
     const id = before ? before.id : role + "-" + row.accountId
     const idOwner = await database.prepare("SELECT account_id FROM users WHERE id = ?").get(id)
@@ -174,7 +174,7 @@ function createPersonnelImportServices(database, context) {
       createdAt:before ? before.createdAt : nowIso(),
       phoneEncrypted:before ? before.phoneEncrypted : null,
       profileCompleted:before ? before.profileCompleted : (row.roster ? 0 : 1),
-      mustChangePassword:before ? before.mustChangePassword : (row.roster ? 1 : 0),
+      mustChangePassword:before ? before.mustChangePassword : (row.roster || role === "counselor" ? 1 : 0),
       profileConsentAt:before ? before.profileConsentAt : null
     }
     if (row.roster) {
@@ -193,6 +193,12 @@ function createPersonnelImportServices(database, context) {
       SELECT * FROM counselor_class_assignments
       WHERE counselor_user_id = ? AND class_id = ? AND semester_id = ?
     `).get(counselorId, row.classId, row.semesterId)
+    const conflicting = await database.prepare(`
+      SELECT counselor_user_id FROM counselor_class_assignments
+      WHERE class_id = ? AND semester_id = ? AND active = 1 AND counselor_user_id <> ?
+      LIMIT 1
+    `).get(row.classId, row.semesterId, counselorId)
+    if (conflicting) throw new HttpError(409, "IMPORT_ASSIGNMENT_CONFLICT", "该班级在本学期已有负责辅导员，请在管理端更换分配")
     const before = existing ? assignmentSnapshot(existing) : null
     const after = {
       counselorUserId:counselorId, classId:row.classId, semesterId:row.semesterId,
@@ -376,7 +382,13 @@ function createPersonnelImportServices(database, context) {
       ${clause}
       ORDER BY s.start_date DESC, u.staff_no, c.id
     `).all(...params)).map(function(row) {
-      return { key:row.counselor_user_id + ":" + row.class_id + ":" + row.semester_id, staffId:row.staff_no, counselorName:row.display_name, classId:row.class_id, className:row.class_name, semesterId:row.semester_id, semesterName:row.semester_name, active:!!row.active }
+      return {
+        key:row.counselor_user_id + ":" + row.class_id + ":" + row.semester_id,
+        staffId:row.staff_no, counselorName:row.display_name, classId:row.class_id,
+        className:row.class_name, semesterId:row.semester_id, semesterName:row.semester_name,
+        active:!!row.active, assignedByUserId:row.assigned_by_user_id || "",
+        updatedAt:row.updated_at || row.created_at, endedAt:row.ended_at || ""
+      }
     })
   }
 
@@ -400,7 +412,7 @@ function createPersonnelImportServices(database, context) {
 function rowKey(row) {
   if (row.type === "class") return "class:" + row.classId
   if (row.type === "student" || row.type === "counselor") return "account:" + row.accountId
-  if (row.type === "assignment") return "assignment:" + row.accountId + ":" + row.classId + ":" + row.semesterId
+  if (row.type === "assignment") return "assignment:" + row.classId + ":" + row.semesterId
   return ""
 }
 

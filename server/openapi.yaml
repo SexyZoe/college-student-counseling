@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 数智心港湾后端 API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     大学生心理健康支持小程序的后端接口。测评结果仅用于教育支持和人工复核，
     不构成医疗诊断。除健康检查外，业务接口使用 Bearer 令牌鉴权。
@@ -57,7 +57,7 @@ paths:
   /api/v1/admin/students/{studentId}/reset-password:
     post:
       tags: [Admin]
-      summary: 重置为登记手机号后6位并撤销旧会话
+      summary: 重置为登记手机号后4位并撤销旧会话
       parameters:
         - in: path
           name: studentId
@@ -423,7 +423,7 @@ paths:
         "200": { $ref: "#/components/responses/Success" }
     post:
       tags: [Admin]
-      summary: 按学期分配辅导员班级权限
+      summary: 按学期分配辅导员班级权限，并替代该班原负责人
       requestBody:
         required: true
         content:
@@ -438,6 +438,85 @@ paths:
       responses:
         "201": { $ref: "#/components/responses/Success" }
         "422": { $ref: "#/components/responses/ValidationError" }
+    patch:
+      tags: [Admin]
+      summary: 撤销指定学期的辅导员班级分配
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [staffId, classId, semesterId]
+              properties:
+                staffId: { type: string }
+                classId: { type: string }
+                semesterId: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/admin/counselors:
+    get:
+      tags: [Admin]
+      summary: 查询辅导员账号和有效班级数
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    post:
+      tags: [Admin]
+      summary: 由管理员创建辅导员账号，临时密码为123456
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [staffId, displayName]
+              properties:
+                staffId: { type: string, minLength: 2, maxLength: 32 }
+                displayName: { type: string, minLength: 1, maxLength: 50 }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/admin/counselors/{staffId}/reset-password:
+    post:
+      tags: [Admin]
+      summary: 将辅导员密码重置为123456并撤销旧会话
+      parameters:
+        - $ref: "#/components/parameters/StaffId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/admin/counselors/{staffId}/status:
+    patch:
+      tags: [Admin]
+      summary: 启用或停用辅导员账号
+      parameters:
+        - $ref: "#/components/parameters/StaffId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [active]
+              properties:
+                active: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/admin/classes:
+    get:
+      tags: [Admin]
+      summary: 按学期查询班级、学生数和当前负责辅导员
+      parameters:
+        - in: query
+          name: semesterId
+          schema: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
   /api/v1/admin/students:
     get:
       tags: [Admin]
@@ -511,6 +590,11 @@ components:
       name: semesterId
       required: true
       schema: { type: string, maxLength: 64 }
+    StaffId:
+      in: path
+      name: staffId
+      required: true
+      schema: { type: string, minLength: 2, maxLength: 32 }
     BatchId:
       in: path
       name: batchId

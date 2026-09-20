@@ -14,6 +14,7 @@ const { createDataProtector } = require("./data-protection")
 const { createStudentAccountServices } = require("./student-account-service")
 const { createPersonnelImportServices } = require("./personnel-import-service")
 const { createMediaServices } = require("./media-service")
+const { createCounselorAdminServices } = require("./counselor-admin-service")
 const scoringEngine = require("../../utils/scoring-engine")
 
 const ROLES = ["student", "counselor", "admin"]
@@ -505,17 +506,63 @@ function createServices(database, config, options) {
 
   async function createCounselorAssignment(user, input) {
     requireRole(user, "admin")
-    const counselor = await database.prepare("SELECT * FROM users WHERE staff_no = ? AND role = 'counselor' AND active = 1").get(String(input.staffId || ""))
+    input = input || {}
+    const counselor = await database.prepare("SELECT * FROM users WHERE staff_no = ? AND role = 'counselor' AND active = 1").get(String(input.staffId || "").trim().toUpperCase())
     const classRow = await database.prepare("SELECT * FROM classes WHERE id = ? AND active = 1").get(String(input.classId || ""))
     const semester = await database.prepare("SELECT * FROM semesters WHERE id = ?").get(String(input.semesterId || ""))
     if (!counselor || !classRow || !semester) throw new HttpError(422, "INVALID_ASSIGNMENT", "辅导员、班级或学期不存在")
-    await database.prepare(`
-      INSERT INTO counselor_class_assignments (counselor_user_id, class_id, semester_id, active, created_at)
-      VALUES (?, ?, ?, 1, ?)
-      ON CONFLICT(counselor_user_id, class_id, semester_id) DO UPDATE SET active = 1
-    `).run(counselor.id, classRow.id, semester.id, nowIso())
-    await audit(user.id, "分配辅导员班级", "class", classRow.id, { counselorId: counselor.id, semesterId: semester.id })
+    const assignedAt = nowIso()
+    await inTransaction(database, async function() {
+      const previous = await database.prepare(`
+        SELECT counselor_user_id FROM counselor_class_assignments
+        WHERE class_id = ? AND semester_id = ? AND active = 1 AND counselor_user_id <> ?
+      `).all(classRow.id, semester.id, counselor.id)
+      await database.prepare(`
+        UPDATE counselor_class_assignments SET active = 0, ended_at = ?, updated_at = ?
+        WHERE class_id = ? AND semester_id = ? AND active = 1 AND counselor_user_id <> ?
+      `).run(assignedAt, assignedAt, classRow.id, semester.id, counselor.id)
+      const existing = await database.prepare(`
+        SELECT 1 FROM counselor_class_assignments
+        WHERE counselor_user_id = ? AND class_id = ? AND semester_id = ?
+      `).get(counselor.id, classRow.id, semester.id)
+      if (existing) {
+        await database.prepare(`
+          UPDATE counselor_class_assignments
+          SET active = 1, assigned_by_user_id = ?, ended_at = NULL, updated_at = ?
+          WHERE counselor_user_id = ? AND class_id = ? AND semester_id = ?
+        `).run(user.id, assignedAt, counselor.id, classRow.id, semester.id)
+      } else {
+        await database.prepare(`
+          INSERT INTO counselor_class_assignments
+            (counselor_user_id, class_id, semester_id, active, created_at, assigned_by_user_id, updated_at, ended_at)
+          VALUES (?, ?, ?, 1, ?, ?, ?, NULL)
+        `).run(counselor.id, classRow.id, semester.id, assignedAt, user.id, assignedAt)
+      }
+      await audit(user.id, "分配辅导员班级", "class", classRow.id, {
+        counselorId:counselor.id,
+        semesterId:semester.id,
+        replacedCounselorIds:previous.map(function(row) { return row.counselor_user_id })
+      })
+    })
     return { staffId: counselor.staff_no, classId: classRow.id, semesterId: semester.id, active: true }
+  }
+
+  async function revokeCounselorAssignment(user, input) {
+    requireRole(user, "admin")
+    input = input || {}
+    const staffId = String(input.staffId || "").trim().toUpperCase()
+    const classId = String(input.classId || "").trim()
+    const semesterId = String(input.semesterId || "").trim()
+    const counselor = await database.prepare("SELECT id FROM users WHERE staff_no = ? AND role = 'counselor'").get(staffId)
+    if (!counselor || !classId || !semesterId) throw new HttpError(422, "INVALID_ASSIGNMENT", "辅导员、班级或学期不正确")
+    const endedAt = nowIso()
+    const result = await database.prepare(`
+      UPDATE counselor_class_assignments SET active = 0, ended_at = ?, updated_at = ?
+      WHERE counselor_user_id = ? AND class_id = ? AND semester_id = ? AND active = 1
+    `).run(endedAt, endedAt, counselor.id, classId, semesterId)
+    if (!result.changes) throw new HttpError(404, "ASSIGNMENT_NOT_FOUND", "未找到有效的班级分配")
+    await audit(user.id, "撤销辅导员班级", "class", classId, { counselorId:counselor.id, semesterId:semesterId })
+    return { staffId:staffId, classId:classId, semesterId:semesterId, active:false }
   }
 
   const personnelImports = createPersonnelImportServices(database, {
@@ -524,6 +571,7 @@ function createServices(database, config, options) {
     audit:audit,
     requireRole:requireRole
   })
+  const counselorAdministration = createCounselorAdminServices(database, { requireRole, audit, nowIso })
 
   async function listAdminAssessmentTasks(user) {
     requireRole(user, "admin")
@@ -735,6 +783,7 @@ function createServices(database, config, options) {
   }
 
   return {
+    ...counselorAdministration,
     ...createStudentAccountServices(database, { requireRole, publicUser, audit, nowIso, dataProtector }),
     getAccount: publicUser,
     checkReadiness,
@@ -754,6 +803,7 @@ function createServices(database, config, options) {
     createSemester,
     setCurrentSemester,
     createCounselorAssignment,
+    revokeCounselorAssignment,
     listAdminAssessmentTasks,
     createAdminAssessmentTask,
     transitionAdminAssessmentTask,
