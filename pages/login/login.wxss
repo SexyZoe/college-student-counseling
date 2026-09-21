@@ -75,6 +75,7 @@
   margin-top: 10rpx;
 }
 .login-btn.loading { opacity: 0.6; }
+.forgot-password { margin:22rpx 0 16rpx; color:#4f8f7c; font-size:25rpx; text-align:center; }
 
 /* 隐私政策 */
 .agreement-section {
@@ -82,9 +83,7 @@
 }
 .agreement-text { font-size: 24rpx; color: #999; margin-left: 8rpx; }
 .agreement-link { font-size: 24rpx; color: #f4a3a8; }
-.demo-accounts { margin-top: 28rpx; padding: 20rpx; border-radius: 14rpx; background: #f8f8f8; color: #888; font-size: 22rpx; line-height: 1.8; display: flex; flex-direction: column; }
-.demo-title { color: #555; font-weight: 600; }
-.demo-note { margin-top: 8rpx; color: #a06f5c; line-height: 1.5; }
+.security-note { margin-top:28rpx; padding:20rpx; border-radius:14rpx; background:#f8f8f8; color:#777; font-size:22rpx; line-height:1.6; }
 
 /* 第2步 */
 .bind-info {

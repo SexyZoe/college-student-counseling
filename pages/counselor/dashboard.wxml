@@ -4,5 +4,5 @@
   <view class="section"><view class="section-head"><text class="section-title">班级概览</text></view><view class="panel" wx:for="{{classes}}" wx:key="id" data-id="{{item.id}}" bindtap="goClass"><view class="head-row"><text class="card-title">{{item.name}}</text><text class="badge">查看学生</text></view><view class="progress-line"><view class="progress-value" style="width:{{item.rate}}%;"></view></view><view class="progress-copy"><text>完成 {{item.completed}}/{{item.total}}</text><text class="risk-high">较高/紧急 {{item.highRisk}}</text></view></view></view>
   <view class="action-grid"><view class="action-item" bindtap="goRisks">风险事件与跟进</view><view class="action-item" bindtap="goContent">发布成长与价值内容</view></view>
   <view class="section"><view class="section-head"><text class="section-title">最近风险提示</text><text class="section-more" bindtap="goRisks">查看全部</text></view><view class="list-card" wx:for="{{recentRisks}}" wx:key="id"><view class="card-main"><text class="card-title">{{item.studentName}} · {{item.className}}</text><text class="card-sub">{{item.summary}}</text><view class="card-meta"><text class="risk-high">{{item.level}}</text><text>{{item.status}}</text><text>{{item.createdAt}}</text></view></view></view></view>
-  <view class="notice">本工作台为本地演示原型。正式系统必须在后端校验辅导员与班级的数据范围，并记录每次敏感访问。</view>
+  <view class="notice">工作台只展示当前账号已获授权班级的必要摘要；敏感访问会记录审计日志。</view>
 </view>

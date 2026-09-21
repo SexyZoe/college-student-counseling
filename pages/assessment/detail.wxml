@@ -8,7 +8,7 @@
       <view class="consent-point">测评过程中，请根据实际情况诚实作答</view>
       <view class="consent-point">答题进度会自动保存在当前设备，可稍后继续</view>
       <view class="consent-point">测评结果仅您本人可见</view>
-      <view class="consent-point">当前演示版仅保存到本机，正式版需接入校内安全后端</view>
+      <view class="consent-point">提交后由校内服务保存；网络中断时会保留待同步记录并在恢复后重试</view>
     </view>
   </view>
 </van-dialog>

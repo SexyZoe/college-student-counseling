@@ -8,7 +8,11 @@ Page({
     if (!auth.requireRole('admin')) return
     this.setData({ tasks: wx.getStorageSync("assessmentTasks") || [], assessments: wx.getStorageSync("assessments") || [] })
     if (apiClient.getSettings().enabled) {
-      apiClient.getAdminAssessmentTasks().then(tasks => {
+      Promise.all([apiClient.getAdminAssessmentTasks(), apiClient.getCurrentSemester()]).then(results => {
+        const tasks = results[0]
+        const semester = results[1]
+        wx.setStorageSync("semesters", [semester])
+        wx.setStorageSync("currentSemesterId", semester.id)
         this.setData({ tasks:tasks.map(item => Object.assign({}, item, { semester:item.semesterName || item.semesterId, target:item.targetClassName || "全部班级" })) })
       }).catch(error => wx.setStorageSync("backendLastError", { code:error.code, message:error.message, time:Date.now() }))
     }

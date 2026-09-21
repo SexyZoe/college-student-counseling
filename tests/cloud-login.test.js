@@ -2,6 +2,7 @@ const test = require("node:test")
 const assert = require("node:assert/strict")
 const storage = Object.create(null)
 const routes = []
+const modals = []
 let pending
 let definition
 global.wx = {
@@ -10,6 +11,7 @@ global.wx = {
   removeStorageSync:key => { delete storage[key] },
   request:options => { pending = options },
   showToast() {},
+  showModal(options) { modals.push(options); if (options.success) options.success({ confirm:true }) },
   reLaunch:options => routes.push(options.url),
   switchTab:options => routes.push(options.url)
 }
@@ -21,6 +23,7 @@ require("../pages/login/login")
 function page(role) {
   for (const key of Object.keys(storage)) delete storage[key]
   routes.length = 0
+  modals.length = 0
   pending = null
   return Object.assign({}, definition, {
     data:Object.assign({}, definition.data, { role, accountId:"cloud-only-user", password:"cloud-password", agreed:true }),
@@ -65,6 +68,7 @@ test("网络超时不得退回本地演示认证", async () => {
   await login
   assert.equal(storage.authSession, undefined)
   assert.deepEqual(routes, [])
+  assert.match(current.data.loginError, /校园网/)
   assert.match(current.data.loginError, /timeout/)
 })
 test("学生跳过资料绑定复用已验证会话，不重复提交密码", async () => {
@@ -113,4 +117,14 @@ test("新导入学生先进入资料与初始密码设置，不创建完整本�
   assert.equal(storage.backendSession.token, "limited-session")
   assert.equal(current.data.password, "")
   assert.deepEqual(routes, ["/pages/account/settings"])
+  assert.match(modals[0].title, /修改初始密码/)
+})
+
+test("学生登录页说明人工找回密码流程", () => {
+  const current = page("student")
+  current.showPasswordRecovery()
+  assert.equal(modals.length, 1)
+  assert.match(modals[0].content, /辅导员/)
+  assert.match(modals[0].content, /管理员/)
+  assert.match(modals[0].content, /学号后4位/)
 })

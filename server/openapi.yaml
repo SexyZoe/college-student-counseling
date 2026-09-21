@@ -57,7 +57,7 @@ paths:
   /api/v1/admin/students/{studentId}/reset-password:
     post:
       tags: [Admin]
-      summary: 重置为登记手机号后4位并撤销旧会话
+      summary: 重置为学号后4位并撤销旧会话
       parameters:
         - in: path
           name: studentId

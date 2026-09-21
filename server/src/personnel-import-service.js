@@ -28,7 +28,7 @@ function createPersonnelImportServices(database, context) {
     }
 
     const headers = parseCsv(csvText)[0] || []
-    const roster = input.format === "student-roster" || headers.some(value => ["班级", "手机号"].includes(value.trim()))
+    const roster = input.format === "student-roster" || headers.some(value => ["班级", "学号"].includes(value.trim()))
     const rows = roster ? await rosterRows(csvText) : normalizeRows(csvText)
     const result = await buildPlan(rows)
     const status = result.errors.length ? "校验失败" : "待确认"
@@ -51,17 +51,17 @@ function createPersonnelImportServices(database, context) {
 
   async function rosterRows(csvText) {
     const parsed = parseCsv(csvText)
-    if (JSON.stringify(parsed[0].map(value => value.trim())) !== JSON.stringify(["班级", "学号", "手机号"])) {
-      throw new HttpError(422, "IMPORT_HEADER_INVALID", "表头必须按顺序为：班级,学号,手机号（不含姓名列）")
+    if (JSON.stringify(parsed[0].map(value => value.trim())) !== JSON.stringify(["班级", "学号"])) {
+      throw new HttpError(422, "IMPORT_HEADER_INVALID", "表头必须按顺序为：班级,学号（不含姓名或手机号列）")
     }
     if (parsed.length < 2) throw new HttpError(422, "IMPORT_EMPTY", "CSV 中没有学生数据")
     if (parsed.length > 501) throw new HttpError(413, "IMPORT_TOO_MANY_ROWS", "单次最多导入500名学生")
-    if (!context.dataProtector.enabled) throw new HttpError(503, "PHONE_ENCRYPTION_REQUIRED", "请先配置服务器数据加密密钥")
     const classes = new Map()
     const rows = []
     for (let index = 1; index < parsed.length; index++) {
-      if (parsed[index].length !== 3) throw new HttpError(422, "IMPORT_ROW_INVALID", "第" + (index + 1) + "行必须恰好为三列")
-      const [className, accountId, phone] = parsed[index].map(value => value.trim())
+      if (parsed[index].length !== 2) throw new HttpError(422, "IMPORT_ROW_INVALID", "第" + (index + 1) + "行必须恰好为两列")
+      const [className, accountIdRaw] = parsed[index].map(value => value.trim())
+      const accountId = accountIdRaw.toLowerCase()
       if (!className || className.length > 50) throw new HttpError(422, "IMPORT_CLASS_INVALID", "第" + (index + 1) + "行班级不能为空且最多50字")
       if (!classes.has(className)) {
         const matches = await database.prepare("SELECT * FROM classes WHERE name = ?").all(className)
@@ -71,7 +71,7 @@ function createPersonnelImportServices(database, context) {
         classes.set(className, classId)
         if (!matches.length) rows.push({ type:"class", rowNumber:index + 1, classId, className, major:"" })
       }
-      rows.push({ type:"student", roster:true, rowNumber:index + 1, accountId:accountId.toLowerCase(), classId:classes.get(className), className, name:"", phone, password:phone.slice(-4) })
+      rows.push({ type:"student", roster:true, rowNumber:index + 1, accountId, classId:classes.get(className), className, name:"", password:accountId.slice(-4) })
     }
     return rows
   }
@@ -176,10 +176,6 @@ function createPersonnelImportServices(database, context) {
       profileCompleted:before ? before.profileCompleted : (row.roster ? 0 : 1),
       mustChangePassword:before ? before.mustChangePassword : (row.roster || role === "counselor" ? 1 : 0),
       profileConsentAt:before ? before.profileConsentAt : null
-    }
-    if (row.roster) {
-      const oldPhone = before && before.phoneEncrypted ? context.dataProtector.unprotectText(before.phoneEncrypted, "student-phone:" + id) : ""
-      if (oldPhone !== row.phone) after.phoneEncrypted = context.dataProtector.protectText(row.phone, "student-phone:" + id)
     }
     const operation = before ? (same(before, after) ? "unchanged" : "update") : "create"
     return planItem(row, "user", row.accountId, operation, before, after,
@@ -359,12 +355,12 @@ function createPersonnelImportServices(database, context) {
   async function listAdminStudents(user) {
     requireRole(user, "admin")
     return (await database.prepare(`
-      SELECT u.student_no, u.display_name, u.class_id, u.active, u.phone_encrypted, u.profile_completed, u.must_change_password, c.name AS class_name, c.major
+      SELECT u.student_no, u.display_name, u.class_id, u.active, u.profile_completed, u.must_change_password, c.name AS class_name, c.major
       FROM users u LEFT JOIN classes c ON c.id = u.class_id
       WHERE u.role = 'student' ORDER BY u.student_no
     `).all()).map(function(row) {
       return { studentId:row.student_no, studentName:row.display_name, classId:row.class_id || "", className:row.class_name || "", major:row.major || "", active:!!row.active,
-        canResetPassword:!!row.phone_encrypted && !!row.active, profileCompleted:!!row.profile_completed, mustChangePassword:!!row.must_change_password }
+        canResetPassword:!!row.active && String(row.student_no || "").length >= 4, profileCompleted:!!row.profile_completed, mustChangePassword:!!row.must_change_password }
     })
   }
 

@@ -68,6 +68,16 @@ Page({
     wx.navigateTo({ url: "/pages/privacy/index" })
   },
 
+  showPasswordRecovery() {
+    if (this.data.role !== "student") return
+    wx.showModal({
+      title: "忘记密码",
+      content: "请先联系你的辅导员，由辅导员联系系统管理员核验身份并重置密码。重置后的临时密码为学号后4位，登录后必须立即修改。",
+      showCancel: false,
+      confirmText: "我知道了"
+    })
+  },
+
   onLogin() {
     if (this.data.loading) return
     if (!this.data.agreed) {
@@ -117,7 +127,17 @@ Page({
       wx.removeStorageSync("backendLastError")
       if (user.mustChangePassword || (user.role === "student" && user.profileCompleted === false)) {
         this.setData({ loading:false, password:"", verifiedAccount:null })
-        wx.reLaunch({ url:"/pages/account/settings" })
+        if (user.role === "student" && user.mustChangePassword) {
+          wx.showModal({
+            title:"请先修改初始密码",
+            content:"当前密码是临时密码。为保护你的账号安全，请立即设置一个只有你本人知道的新密码。完成修改后才能使用测评等功能。",
+            showCancel:false,
+            confirmText:"去修改",
+            success:() => wx.reLaunch({ url:"/pages/account/settings" })
+          })
+        } else {
+          wx.reLaunch({ url:"/pages/account/settings" })
+        }
         return
       }
       if (account.role === "student") {
@@ -139,7 +159,7 @@ Page({
       success: result => this.finishStudentLogin(result.userInfo),
       fail: () => this.setData({
         loading: false,
-        bindError: "未获得微信资料授权。你可以重试，或选择暂不绑定进入演示。"
+        bindError: "未获得微信资料授权。你可以重试，或选择暂不绑定继续使用。"
       })
     })
   },

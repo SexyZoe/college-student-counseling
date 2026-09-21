@@ -105,6 +105,13 @@ async function test(name, callback) {
     assert.strictEqual(calls[3].url.endsWith("/api/v1/admin/content-items/7/review"), true)
   })
 
+  await test("当前学期从校内后端读取", async function() {
+    apiClient.configure({ enabled:true })
+    storage.backendSession = { token:"admin-token" }
+    await apiClient.getCurrentSemester()
+    assert.strictEqual(calls[0].url.endsWith("/api/v1/semesters/current"), true)
+  })
+
   await test("离线结果进入队列，登录后可幂等同步并回写远端编号", async function() {
     storage.assessmentResults = [sampleResult(1, "client:success")]
     resultSync.enqueueResult(storage.assessmentResults[0])
