@@ -8,7 +8,8 @@ const apiClient = require("./utils/api-client")
 App({
   onLaunch() {
     this.migrateLocalData()
-    this.initLocalDemoData()
+    this.setDefaultStorage("assessments", this.getAssessments())
+    if (!apiClient.getSettings().enabled) this.initLocalDemoData()
     semesterService.ensureSemesterState()
     if (apiClient.getSettings().enabled) {
       const remote = apiClient.getSession()

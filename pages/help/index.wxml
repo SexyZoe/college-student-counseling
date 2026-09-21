@@ -9,5 +9,5 @@
     <view class="call-btn" data-name="{{item.name}}" data-phone="{{item.phone}}" bindtap="callResource">拨打</view>
   </view>
   <view class="tip-card"><text class="tip-title">如何陪伴正在困扰中的同学</text><text>认真倾听，不评判；询问“我能为你做什么”；鼓励联系专业人员；涉及安全风险时及时告诉有能力提供帮助的人。</text></view>
-  <view class="demo-note">以上校内号码为演示数据，正式上线前必须由学校确认并维护。</view>
+  <view class="resource-note-card">校内心理中心和保卫部门的联系方式请以学校官网、校园服务平台或辅导员发布的信息为准。</view>
 </view>

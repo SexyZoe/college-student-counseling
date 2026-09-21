@@ -103,7 +103,7 @@ function validateFormat(row) {
     if (!row.roster && (!row.name || row.name.length > 50)) add("姓名", "不能为空且最多 50 个字符")
     if (row.type === "student" && !/^[A-Z0-9_-]{2,32}$/.test(row.classId)) add("班级编号", "学生必须填写有效班级编号")
     if (!row.roster && row.type === "student" && row.password && (row.password.length < 8 || row.password.length > 64)) add("初始密码", "填写时必须为 8–64 个字符")
-    if (row.roster && !/^1[3-9]\d{9}$/.test(row.phone)) add("手机号", "请填写11位大陆手机号")
+    if (row.roster && !/^[a-z0-9_-]{4,32}$/.test(row.accountId)) add("学号", "需为 4–32 位字母、数字、下划线或短横线，以便生成后4位初始密码")
   }
   if (row.type === "assignment") {
     if (!/^[a-z0-9_-]{3,32}$/.test(row.accountId)) add("账号", "分配行账号必须填写辅导员工号")

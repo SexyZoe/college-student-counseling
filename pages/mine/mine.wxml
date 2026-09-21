@@ -77,7 +77,7 @@
   </view>
 
   <view class="version-section">
-    <text class="version-text">数智心港湾 v2.0.0 · 本地演示</text>
+    <text class="version-text">数智心港湾 v2.0.0 · 校园服务版</text>
   </view>
 
   <!-- 编辑个人资料弹窗 -->

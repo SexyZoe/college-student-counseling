@@ -36,6 +36,14 @@ function clearSession() {
   wx.removeStorageSync(BACKEND_SESSION_KEY)
 }
 
+function networkErrorMessage(error) {
+  const raw = error && error.errMsg ? String(error.errMsg).replace(/^request:fail\s*/i, "").trim() : ""
+  if (deployment.accessScope === "campus") {
+    return "无法连接校园服务，请确认手机已连接校园网后重试" + (raw ? "（" + raw + "）" : "")
+  }
+  return raw || "无法连接后端服务"
+}
+
 function request(options) {
   const settings = getSettings()
   if (!settings.enabled) return Promise.reject(new BackendError(0, "BACKEND_DISABLED", "后端同步尚未启用"))
@@ -64,7 +72,7 @@ function request(options) {
         reject(new BackendError(response.statusCode, error.code, error.message, error.details))
       },
       fail: function(error) {
-        reject(new BackendError(0, "NETWORK_ERROR", error && error.errMsg ? error.errMsg : "无法连接后端服务"))
+        reject(new BackendError(0, "NETWORK_ERROR", networkErrorMessage(error)))
       }
     })
   })
@@ -101,6 +109,10 @@ function submitAssessmentResult(payload) {
 
 function getAssessmentTasks() {
   return request({ path: "/api/v1/assessment-tasks" })
+}
+
+function getCurrentSemester() {
+  return request({ path: "/api/v1/semesters/current" })
 }
 
 function getMyResults() {
@@ -238,6 +250,7 @@ module.exports = {
   request: request,
   login: login,
   logout: logout,
+  getCurrentSemester: getCurrentSemester,
   submitAssessmentResult: submitAssessmentResult,
   getAssessmentTasks: getAssessmentTasks,
   getMyResults: getMyResults,

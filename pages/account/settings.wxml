@@ -7,7 +7,7 @@
       <block wx:if="{{user.role === 'student'}}">
         <text class="label">姓名</text>
         <input value="{{displayName}}" data-field="displayName" bindinput="onInput" maxlength="50" placeholder="请自行填写姓名" disabled="{{loading}}" />
-        <text class="hint">姓名用于本人资料展示和授权辅导员的学生支持工作。班级、学号和手机号来自管理员导入的名单；姓名由你自行填写。</text>
+        <text class="hint">姓名用于本人资料展示和授权辅导员的学生支持工作。班级和学号来自管理员导入的名单；姓名由你自行填写。</text>
         <checkbox-group bindchange="onConsent"><label><checkbox value="agree" checked="{{consent}}" disabled="{{loading}}" />我已了解上述用途，同意保存本人填写的姓名</label></checkbox-group>
         <text class="link" bindtap="viewPolicy">查看隐私与信息使用说明</text>
       </block>
@@ -15,7 +15,7 @@
       <input password value="{{currentPassword}}" data-field="currentPassword" bindinput="onInput" maxlength="64" placeholder="原密码 / 初始密码" disabled="{{loading}}" />
       <input password value="{{newPassword}}" data-field="newPassword" bindinput="onInput" maxlength="64" placeholder="新密码（8至64位）" disabled="{{loading}}" />
       <input password value="{{confirmPassword}}" data-field="confirmPassword" bindinput="onInput" maxlength="64" placeholder="再次输入新密码" disabled="{{loading}}" />
-      <text class="hint">修改密码后需要重新登录。学生忘记密码请联系管理员，重置为登记手机号后4位；辅导员重置后的临时密码为123456。</text>
+      <text class="hint">修改密码后需要重新登录。学生忘记密码请先联系辅导员，由辅导员联系管理员重置为学号后4位；辅导员重置后的临时密码为123456。</text>
     </view>
     <text class="error" wx:if="{{error}}">{{error}}</text>
     <button class="save" bindtap="save" loading="{{loading}}" disabled="{{loading || !user}}">保存</button>

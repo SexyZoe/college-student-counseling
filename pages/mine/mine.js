@@ -105,7 +105,7 @@ Page({
     if (isModal) {
       wx.showModal({
         title: "关于我们",
-        content: "数智心港湾 v2.0.0（演示原型）\n\n面向学生、辅导员和管理员的心理健康教育、状态筛查与支持平台。测评结果不构成医疗诊断。",
+        content: "数智心港湾 v2.0.0\n\n面向学生、辅导员和管理员的心理健康教育、状态自评与支持平台。测评结果不构成医疗诊断。",
         showCancel: false
       })
       return

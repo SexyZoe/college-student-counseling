@@ -24,6 +24,7 @@ function collectSourceFiles(directory) {
 const sourceFiles = collectSourceFiles(projectRoot)
 const bomFiles = []
 const syntaxErrors = []
+const releaseUiErrors = []
 
 sourceFiles.forEach(function(filePath) {
   const buffer = fs.readFileSync(filePath)
@@ -39,9 +40,19 @@ sourceFiles.forEach(function(filePath) {
   }
 })
 
+const forbiddenReleasePhrases = ['本地演示', '当前演示版', '正式版本需', '演示原型', '进入演示']
+sourceFiles.filter(function(filePath) { return path.extname(filePath) === '.wxml' }).forEach(function(filePath) {
+  const source = fs.readFileSync(filePath, 'utf8')
+  forbiddenReleasePhrases.forEach(function(phrase) {
+    if (source.includes(phrase)) releaseUiErrors.push(path.relative(projectRoot, filePath) + ': ' + phrase)
+  })
+})
+
 assert.deepEqual(bomFiles, [], '源码文件不能包含 UTF-8 BOM：\n' + bomFiles.join('\n'))
 assert.deepEqual(syntaxErrors, [], 'JavaScript 语法检查失败：\n' + syntaxErrors.join('\n'))
+assert.deepEqual(releaseUiErrors, [], '正式界面不能暴露演示版文案：\n' + releaseUiErrors.join('\n'))
 
 console.log('✓ 源码文件无 UTF-8 BOM')
 console.log('✓ 全部 JavaScript 文件语法有效')
+console.log('✓ 正式界面未包含演示版提示')
 console.log('\n源码完整性测试全部通过')

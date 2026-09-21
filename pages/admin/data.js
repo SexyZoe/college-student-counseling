@@ -52,9 +52,12 @@ Page({
       apiClient.getImportBatches()
     ]).then(results => {
       const semesters = results[0]
+      const currentSemester = semesters.find(item => item.status === "当前学期") || null
+      wx.setStorageSync("semesters", semesters)
+      if (currentSemester) wx.setStorageSync("currentSemesterId", currentSemester.id)
       this.setData({
         semesters:semesters,
-        currentSemester:semesters.find(item => item.status === "当前学期") || null,
+        currentSemester:currentSemester,
         students:results[1],
         assignmentClasses:Array.from(new Map(results[1].filter(item => item.active && item.classId).map(item => [item.classId, { id:item.classId, name:item.className || item.classId }])).values()),
         assignments:results[2],
@@ -132,9 +135,9 @@ Page({
 
   copyTemplate() {
     const template = [
-      "班级,学号,手机号",
-      "软件工程1班,20260001,13812345678",
-      "软件工程1班,20260002,13912345678"
+      "班级,学号",
+      "软件工程1班,20260001",
+      "软件工程1班,20260002"
     ].join("\n")
     wx.setClipboardData({ data:template, success:() => wx.showToast({ title:"CSV模板已复制", icon:"success" }) })
   },
@@ -240,7 +243,7 @@ Page({
     if (!student || !student.canResetPassword) return
     wx.showModal({
       title:"重置学生密码",
-      content:"将学号 " + studentId + " 的密码重置为登记手机号后4位。现有登录将失效，下次登录须修改密码。",
+      content:"将学号 " + studentId + " 的密码重置为该学号后4位。现有登录将失效，下次登录须立即修改密码。",
       success:result => {
         if (!result.confirm) return
         this.setData({ loading:true })

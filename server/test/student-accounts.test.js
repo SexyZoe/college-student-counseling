@@ -8,15 +8,14 @@ const { openDatabase, openConfiguredDatabase, seedDemoData } = require("../src/d
 const { loadConfig } = require("../src/config")
 const { createServices } = require("../src/services")
 const { createHttpApp } = require("../src/app")
-const { createDataProtector } = require("../src/data-protection")
 const config = Object.assign({}, loadConfig({}), {
   authSecret:"isolated-student-account-test-secret", dataEncryptionKey:"ab".repeat(32),
   tokenTtlSeconds:3600, logLevel:"error", generalRateLimitPerMinute:5000, loginRateLimitPerMinute:1000
 })
 let database, server, baseUrl, admin, counselor, initialToken, studentToken, batchId
-const phone = "13812003456"
 const accountId = "002026001"
-const roster = "班级,学号,手机号\n软件工程1班," + accountId + "," + phone
+const initialPassword = accountId.slice(-4)
+const roster = "班级,学号\n软件工程1班," + accountId
 const key = () => "roster:" + crypto.randomUUID()
 async function api(route, token, method = "GET", data) {
   const response = await fetch(baseUrl + "/api/v1" + route, {
@@ -53,31 +52,30 @@ test.after(async () => {
   if (database) await database.close()
 })
 
-test("三列名单、首次完善、改密、人工重置及导入回滚", async t => {
+test("两列名单、首次完善、改密、人工重置及导入回滚", async t => {
   await t.test("仅管理员可导入；顺序错误、多余姓名列均被拒绝", async () => {
     assert.equal((await preview(roster, counselor)).status, 403)
-    for (const csv of ["学号,班级,手机号\n002026001,软件工程1班," + phone, "班级,学号,手机号,姓名\n软件工程1班,002026001," + phone + ",小明"]) {
+    for (const csv of ["学号,班级\n002026001,软件工程1班", "班级,学号,姓名\n软件工程1班,002026001,小明", "班级,学号,手机号\n软件工程1班,002026001,13812003456"]) {
       assert.equal((await preview(csv)).status, 422)
     }
   })
-  await t.test("重复学号和无效手机号阻止整批写入", async () => {
-    for (const csv of [roster + "\n软件工程1班," + accountId + ",13912003456", "班级,学号,手机号\n软件工程1班,002026001,123"]) {
+  await t.test("重复学号和不足4位的学号阻止整批写入", async () => {
+    for (const csv of [roster + "\n软件工程1班," + accountId, "班级,学号\n软件工程1班,123"]) {
       const response = await preview(csv)
       assert.equal(response.body.data.status, "校验失败")
       assert.equal((await api("/admin/import-batches/" + response.body.data.id + "/confirm", admin, "POST", {})).status, 409)
     }
     assert.equal(await getStudent(), undefined)
   })
-  await t.test("预检不创建账号、只保存手机号密文与密码摘要", async () => {
+  await t.test("预检不创建账号且不返回初始密码或密码摘要", async () => {
     const response = await preview()
     assert.equal(response.status, 201)
     assert.equal(response.body.data.errorCount, 0)
     assert.equal(response.body.data.totalRows, 1)
     batchId = response.body.data.id
     const batch = await database.prepare("SELECT plan_json FROM import_batches WHERE id = ?").get(batchId)
-    const plan = JSON.stringify(batch.plan_json)
-    assert.ok(!plan.includes(phone))
-    assert.ok(!plan.includes(phone.slice(-4)))
+    const plan = typeof batch.plan_json === "string" ? JSON.parse(batch.plan_json) : batch.plan_json
+    assert.equal(Object.prototype.hasOwnProperty.call(plan.items.find(item => item.entityType === "user").row, "password"), false)
     assert.ok(!JSON.stringify(response.body).includes("passwordHash"))
     assert.equal(await getStudent(), undefined)
   })
@@ -86,8 +84,8 @@ test("三列名单、首次完善、改密、人工重置及导入回滚", async
     const student = await getStudent()
     assert.equal(student.account_id, accountId)
     assert.equal(student.display_name, "")
-    assert.match(student.phone_encrypted, /^enc:v1:/)
-    const response = await login("student", accountId, phone.slice(-4))
+    assert.equal(student.phone_encrypted, null)
+    const response = await login("student", accountId, initialPassword)
     assert.equal(response.status, 200)
     assert.equal(response.body.data.user.className, "软件工程1班")
     assert.equal(response.body.data.user.profileCompleted, false)
@@ -106,9 +104,9 @@ test("三列名单、首次完善、改密、人工重置及导入回滚", async
   })
   await t.test("改密验证原密码，成功后旧会话与旧密码失效", async () => {
     assert.equal((await api("/account/password", initialToken, "POST", { currentPassword:"wrong", newPassword:"StudentNew123" })).status, 422)
-    assert.equal((await api("/account/password", initialToken, "POST", { currentPassword:phone.slice(-4), newPassword:"StudentNew123" })).status, 200)
+    assert.equal((await api("/account/password", initialToken, "POST", { currentPassword:initialPassword, newPassword:"StudentNew123" })).status, 200)
     assert.equal((await api("/account", initialToken)).status, 401)
-    assert.equal((await login("student", accountId, phone.slice(-4))).status, 401)
+    assert.equal((await login("student", accountId, initialPassword)).status, 401)
     const response = await login("student", accountId, "StudentNew123")
     studentToken = response.body.data.token
     assert.equal(response.body.data.user.mustChangePassword, false)
@@ -123,17 +121,16 @@ test("三列名单、首次完善、改密、人工重置及导入回滚", async
     assert.equal((await login("student", accountId, "StudentNew123")).status, 200)
     assert.equal((await api("/admin/import-batches/" + batchId + "/rollback", admin, "POST", {})).status, 409)
   })
-  await t.test("更新手机号保留现有密码，回滚恢复手机号，按当前登记号重置", async () => {
-    const changedPhone = "13955556666"
-    const response = await preview(roster.replace(phone, changedPhone))
+  await t.test("更新班级保留现有密码，回滚恢复原班级", async () => {
+    const originalClassId = (await getStudent()).class_id
+    const response = await preview(roster.replace("软件工程1班", "软件工程2班"))
     assert.equal(response.body.data.updateCount, 1)
     const id = response.body.data.id
     assert.equal((await api("/admin/import-batches/" + id + "/confirm", admin, "POST", {})).status, 200)
     assert.equal((await login("student", accountId, "StudentNew123")).status, 200)
+    assert.notEqual((await getStudent()).class_id, originalClassId)
     assert.equal((await api("/admin/import-batches/" + id + "/rollback", admin, "POST", {})).status, 200)
-    const protector = createDataProtector(config.dataEncryptionKey)
-    const student = await getStudent()
-    assert.equal(protector.unprotectText(student.phone_encrypted, "student-phone:" + student.id), phone)
+    assert.equal((await getStudent()).class_id, originalClassId)
   })
   await t.test("学生与辅导员不能重置密码；管理员重置使旧会话失效", async () => {
     const route = "/admin/students/" + accountId + "/reset-password"
@@ -141,21 +138,21 @@ test("三列名单、首次完善、改密、人工重置及导入回滚", async
     assert.equal((await api(route, counselor, "POST", {})).status, 403)
     const response = await api(route, admin, "POST", {})
     assert.equal(response.status, 200)
-    assert.ok(!JSON.stringify(response.body).includes(phone.slice(-4)))
+    assert.ok(!JSON.stringify(response.body).includes(initialPassword))
     assert.equal((await api("/account", studentToken)).status, 401)
-    const loginResult = await login("student", accountId, phone.slice(-4))
+    const loginResult = await login("student", accountId, initialPassword)
     assert.equal(loginResult.status, 200)
     assert.equal(loginResult.body.data.user.mustChangePassword, true)
     assert.equal((await api("/assessment-tasks", loginResult.body.data.token)).status, 403)
     const audit = await database.prepare("SELECT * FROM audit_logs WHERE action = '重置学生密码'").all()
     assert.equal(audit.length, 1)
-    assert.ok(!JSON.stringify(audit).includes(phone))
+    assert.match(String(audit[0].details_json), /student-id-last-four/)
   })
   await t.test("导入新名单后可整批回滚，停用账号不能登录", async () => {
-    const response = await preview("班级,学号,手机号\n可回滚班级,00990001,13812340000")
+    const response = await preview("班级,学号\n可回滚班级,00990001")
     const id = response.body.data.id
     assert.equal((await api("/admin/import-batches/" + id + "/confirm", admin, "POST", {})).status, 200)
     assert.equal((await api("/admin/import-batches/" + id + "/rollback", admin, "POST", {})).status, 200)
-    assert.equal((await login("student", "00990001", "340000")).status, 401)
+    assert.equal((await login("student", "00990001", "0001")).status, 401)
   })
 })

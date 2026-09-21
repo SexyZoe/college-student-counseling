@@ -1,6 +1,7 @@
 // pages/index/index.js
 const auth = require("../../utils/auth")
 const semesterService = require("../../utils/semester")
+const apiClient = require("../../utils/api-client")
 
 Page({
   data: {
@@ -33,6 +34,7 @@ Page({
       this.getTabBar().setData({ selected: 0 })
     }
     this.loadBasicData()
+    this.loadRemoteData()
   },
 
   onPullDownRefresh() {
@@ -48,6 +50,49 @@ Page({
     this.loadArticles()
     this.loadCivicsArticles()
     this.loadPendingAssessments()
+  },
+
+  loadRemoteData() {
+    const user = auth.getCurrentUser()
+    if (!user || user.role !== "student" || !apiClient.getSettings().enabled || !apiClient.getSession()) return
+    Promise.all([
+      apiClient.getCurrentSemester(),
+      apiClient.getAssessmentTasks(),
+      apiClient.getMyResults(),
+      apiClient.getPublishedContent("psychoeducation"),
+      apiClient.getPublishedContent("civics")
+    ]).then(results => {
+      const semester = results[0]
+      const taskResults = (results[2] || []).map(function(item) {
+        return Object.assign({}, item, { level:item.level || item.riskLevel })
+      })
+      const tasks = (results[1] || []).map(function(task) {
+        return Object.assign({}, task, {
+          semester:semester.name,
+          completed:taskResults.some(function(item) { return String(item.taskId || "") === String(task.id) })
+        })
+      })
+      const mapContent = function(item) {
+        const cover = (item.media || []).find(function(media) { return media.kind === "image" })
+        return Object.assign({}, item, {
+          author:item.authorName,
+          reviewer:item.reviewerName,
+          createTime:item.publishTime || item.createdAt,
+          updateTime:item.updatedAt,
+          views:0,
+          cover:cover ? cover.url : "/images/articles/article_growth.png"
+        })
+      }
+      wx.setStorageSync("semesters", [semester])
+      wx.setStorageSync("currentSemesterId", semester.id)
+      wx.setStorageSync("assessmentTasks", tasks)
+      wx.setStorageSync("assessmentResults", taskResults)
+      wx.setStorageSync("articles", (results[3] || []).map(mapContent))
+      wx.setStorageSync("civicsArticles", (results[4] || []).map(mapContent))
+      this.loadBasicData()
+    }).catch(error => {
+      wx.setStorageSync("backendLastError", { code:error.code || "SYNC_FAILED", message:error.message, time:Date.now() })
+    })
   },
 
   loadUserInfo() {

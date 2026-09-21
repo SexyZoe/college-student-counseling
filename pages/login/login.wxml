@@ -37,15 +37,10 @@
 
     <view class="error-msg" wx:if="{{loginError}}" role="alert">{{loginError}}</view>
     <view class="login-btn {{loading ? 'loading' : ''}}" bindtap="onLogin">{{loading ? '验证中…' : '登录'}}</view>
-    <view class="role-description" wx:if="{{role === 'student'}}">名单导入账号使用学号登录，临时密码为登记手机号后4位。首次登录必须修改密码。</view>
-    <view class="role-description" wx:if="{{role === 'counselor'}}">辅导员账号由管理员创建，临时密码为 123456。首次登录必须修改密码。</view>
-
-    <view class="demo-accounts">
-      <text class="demo-title">本地演示账号（密码均为 123456）</text>
-      <text>学生：2024001 / 2024002</text>
-      <text>辅导员：T001　管理员：admin</text>
-      <text class="demo-note">连续输错 5 次将锁定该账号 60 秒；正式版本需接入学校认证后端。</text>
-    </view>
+    <view class="forgot-password" wx:if="{{role === 'student'}}" bindtap="showPasswordRecovery">忘记密码？</view>
+    <view class="role-description" wx:if="{{role === 'student'}}">名单导入账号使用学号登录，初始密码为学号后4位。首次登录必须修改密码。</view>
+    <view class="role-description" wx:if="{{role === 'counselor'}}">辅导员账号由管理员创建，请使用管理员发放的临时密码登录；首次登录必须修改密码。</view>
+    <view class="security-note">连续输错 5 次将临时锁定账号。若无法连接服务，请确认手机已连接校园网。</view>
   </view>
 
   <view class="login-card" wx:if="{{step === 'bind'}}">
@@ -54,13 +49,13 @@
       <text class="logo-title">绑定微信身份</text>
       <text class="logo-subtitle">校内身份验证成功</text>
     </view>
-    <view class="bind-info"><text class="bind-hint">微信绑定仅用于识别当前账号。本演示版本不会向服务器上传资料；正式版本需要由后端安全换取会话。</text></view>
+    <view class="bind-info"><text class="bind-hint">微信资料仅用于识别当前账号；不绑定也可以继续使用学号账号。</text></view>
     <view class="error-msg" wx:if="{{bindError}}" role="alert">{{bindError}}</view>
     <view class="wechat-btn {{loading ? 'loading' : ''}}" bindtap="onBindWechat">
       <van-icon name="wechat" size="20px" color="#ffffff" />
       <text>{{loading ? '绑定中...' : '微信一键绑定'}}</text>
     </view>
-    <view class="skip-section" bindtap="onSkipBind"><text class="skip-text">暂不绑定，进入演示</text></view>
+    <view class="skip-section" bindtap="onSkipBind"><text class="skip-text">暂不绑定，继续使用</text></view>
     <view class="back-section" bindtap="goBack"><van-icon name="arrow-left" size="14px" color="#999" /><text class="back-text-small">返回重新登录</text></view>
   </view>
 
