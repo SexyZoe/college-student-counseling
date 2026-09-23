@@ -54,6 +54,8 @@ test("Web管理端与文章媒体上传闭环", async function(t) {
     assert.equal(result.response.status, 200)
     assert.match(result.response.headers.get("content-type"), /javascript/)
     assert.match(result.body, /xlsxToCsv/)
+    assert.match(result.body, /newClientBatchId/)
+    assert.doesNotMatch(result.body, /clientBatchId:"web:"\+crypto\.randomUUID/)
   })
 
   let image
