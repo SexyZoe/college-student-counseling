@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
   title: 数智心港湾后端 API
-  version: 0.4.0
+  version: 2.0.0
   description: |
-    大学生心理健康支持小程序的后端接口。测评结果仅用于教育支持和人工复核，
-    不构成医疗诊断。除健康检查外，业务接口使用 Bearer 令牌鉴权。
+    校园内网心理健康网页应用的后端接口。测评结果仅用于教育支持和人工复核，
+    不构成医疗诊断。网页使用 HttpOnly Cookie（写请求需 X-Requested-With: campus-web），兼容脚本 Bearer 令牌鉴权。
 servers:
   - url: http://127.0.0.1:8787
     description: 本地开发
@@ -15,6 +15,45 @@ tags:
   - name: Counselor
   - name: Admin
 paths:
+  /api/v1/site:
+    get:
+      tags: [Operations]
+      summary: 获取学校名称、求助和隐私联系信息
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+  /api/v1/student/catalog:
+    get:
+      tags: [Student]
+      summary: 获取固定版本量表、FAQ及测评同意版本
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+  /api/v1/student/submissions:
+    post:
+      tags: [Student]
+      summary: 网页提交答案；服务端评分、快照、同意审计和幂等保存
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [submissionId, assessmentId, answers, questionnaireVersion, scoringVersion, consent, consentVersion]
+              properties:
+                submissionId: { type: string, minLength: 6, maxLength: 128 }
+                assessmentId: { type: integer, minimum: 1, maximum: 8 }
+                taskId: { type: string }
+                answers:
+                  type: object
+                  description: 零起始题号到零起始选项索引的映射
+                  additionalProperties: { type: integer, minimum: 0, maximum: 3 }
+                questionnaireVersion: { type: string }
+                scoringVersion: { type: string }
+                consent: { type: boolean, const: true }
+                consentVersion: { type: string }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /api/v1/account:
     get:
       tags: [Authentication]
@@ -577,6 +616,10 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
 components:
   securitySchemes:
+    campusCookie:
+      type: apiKey
+      in: cookie
+      name: campus_session
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
     metricsBearer: { type: http, scheme: bearer }
   parameters:
@@ -624,12 +667,13 @@ components:
       type: object
       required: [role, accountId, password]
       properties:
+        client: { type: string, enum: [web], description: 网页登录只设置Cookie而不返回token }
         role: { type: string, enum: [student, counselor, admin] }
         accountId: { type: string, maxLength: 160 }
         password: { type: string, format: password }
     LoginResult:
       type: object
-      required: [token, expiresIn, user]
+      required: [expiresIn, user]
       properties:
         token: { type: string, writeOnly: true }
         expiresIn: { type: integer }
@@ -735,3 +779,4 @@ components:
           schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 security:
   - bearerAuth: []
+  - campusCookie: []

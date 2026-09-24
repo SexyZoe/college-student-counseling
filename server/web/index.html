@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#173f3b">
-  <title>数智心港湾 · 校园管理端</title>
+  <title>数智心港湾 · 校园心理健康平台</title>
   <link rel="stylesheet" href="/web/styles.css">
+  <link rel="stylesheet" href="/web/campus.css">
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -14,21 +15,24 @@
       <div class="login-story">
         <span class="eyebrow">校园心理健康云平台</span>
         <h1>让每一次关注，<br>都能被妥善承接。</h1>
-        <p>管理员、辅导员与学生小程序共用同一套校园云数据。</p>
+        <p>连接校园 Wi-Fi，让关怀从这里开始。学生、辅导员和管理员都可以通过浏览器使用。</p>
         <div class="story-cards"><span>班级数据</span><span>风险跟进</span><span>内容共建</span></div>
       </div>
       <form id="login-form" class="login-card">
         <div class="brand-mark">心</div>
         <h2>欢迎回来</h2>
         <p class="muted">请使用学校分配的账号登录</p>
-        <label>身份<select id="login-role"><option value="admin">管理员</option><option value="counselor">辅导员</option></select></label>
-        <label>账号<input id="login-account" autocomplete="username" required placeholder="请输入账号"></label>
+        <label>身份<select id="login-role"><option value="student">学生</option><option value="counselor">辅导员</option><option value="admin">管理员</option></select></label>
+        <label>账号<input id="login-account" autocomplete="username" required placeholder="学生填写学号，教职工填写分配的账号"></label>
         <label>密码<input id="login-password" type="password" autocomplete="current-password" required placeholder="请输入密码"></label>
-        <button class="button primary wide" type="submit">登录管理端</button>
+        <button class="button primary wide" type="submit">登录校园平台</button>
         <p class="login-note">本系统仅供学校授权人员使用</p>
       </form>
     </section>
   </main>
+  <noscript>请启用浏览器 JavaScript 后使用校园平台。</noscript>
+  <script src="/web/personality.js" defer></script>
+  <script src="/web/student.js" defer></script>
   <script src="/web/app.js" defer></script>
 </body>
 </html>

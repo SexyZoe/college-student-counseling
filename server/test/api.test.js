@@ -313,7 +313,7 @@ test("后端测评数据闭环", async function(t) {
     assert.equal(response.body.data[0].title, "理性表达与网络素养")
 
     response = await api("/api/v1/admin/content-items/" + contentId + "/review", {
-      method:"PATCH", headers:authHeaders(admin.token), body:JSON.stringify({ status:"已退回", reviewNote:"重复审核" })
+      method:"PATCH", headers:authHeaders(admin.token), body:JSON.stringify({ status:"已发布", reviewNote:"重复审核" })
     })
     assert.equal(response.status, 409)
   })

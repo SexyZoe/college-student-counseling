@@ -10,3 +10,8 @@
 !server/scripts/**
 !utils/
 !utils/scoring-engine.js
+
+!server/web/
+!server/web/**
+!shared/
+!shared/**
