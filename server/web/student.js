@@ -107,7 +107,8 @@
     if (missing !== -1) { draft.index = missing; question(assessment, draft); C().notice("还有未回答的题目，请先补齐", true); return; }
     if (!draft.pending && !confirm("确认提交本次答案？提交后将保存到学校系统。")) return;
     draft.pending = true; save(draft); submitting = true;
-    const next = el("next"); if (next) { next.disabled = true; next.textContent = "正在提交…"; }
+    document.querySelectorAll(".quiz-card input, .quiz-card button").forEach(node=>node.disabled=true);
+    const next = el("next"); if (next) { next.textContent = "正在提交…"; }
     try {
       const data = await C().api("/api/v1/student/submissions", { method: "POST", body: JSON.stringify(draft) });
       sessionStorage.removeItem(draft.key); activeDraft = null;
@@ -115,8 +116,9 @@
     } catch (error) {
       if (error.status && error.status < 500 && error.status !== 429) { draft.pending = false; save(draft); }
       C().notice(error.message, true);
+      question(assessment, draft);
       if (el("submit-status")) el("submit-status").textContent = "尚未确认保存。请保持本页，连接校园网后点击重试；不会重复记录。";
-      if (next) { next.disabled = false; next.textContent = "重试提交"; }
+      if (el("next")) { el("next").disabled = false; el("next").textContent = "重试提交"; }
     } finally { submitting = false; }
   }
   async function history() {
