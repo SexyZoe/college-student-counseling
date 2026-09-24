@@ -8,7 +8,7 @@ services:
       dockerfile: server/Dockerfile
     init: true
     ports:
-      - "${BACKEND_PORT:-8787}:8787"
+      - "127.0.0.1:${BACKEND_PORT:-8787}:8787"
     environment:
       NODE_ENV: "${NODE_ENV:-development}"
       HOST: "0.0.0.0"
@@ -27,6 +27,12 @@ services:
       LOGIN_RATE_LIMIT_PER_MINUTE: "${LOGIN_RATE_LIMIT_PER_MINUTE:-30}"
       TRUST_PROXY: "${TRUST_PROXY:-false}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
+      SCHOOL_NAME: "${SCHOOL_NAME:-校园}"
+      SUPPORT_PHONE: "${SUPPORT_PHONE:-}"
+      SUPPORT_LOCATION: "${SUPPORT_LOCATION:-}"
+      SUPPORT_HOURS: "${SUPPORT_HOURS:-}"
+      PRIVACY_CONTACT: "${PRIVACY_CONTACT:-}"
+      RETENTION_NOTICE: "${RETENTION_NOTICE:-}"
       METRICS_TOKEN: "${METRICS_TOKEN:-}"
     volumes:
       - backend-data:/app/data
@@ -54,7 +60,7 @@ services:
       dockerfile: server/Dockerfile
     init: true
     ports:
-      - "${BACKEND_PORT:-8787}:8787"
+      - "127.0.0.1:${BACKEND_PORT:-8787}:8787"
     environment:
       NODE_ENV: "${NODE_ENV:-development}"
       HOST: "0.0.0.0"
@@ -81,6 +87,12 @@ services:
       LOGIN_RATE_LIMIT_PER_MINUTE: "${LOGIN_RATE_LIMIT_PER_MINUTE:-30}"
       TRUST_PROXY: "${TRUST_PROXY:-false}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
+      SCHOOL_NAME: "${SCHOOL_NAME:-校园}"
+      SUPPORT_PHONE: "${SUPPORT_PHONE:-}"
+      SUPPORT_LOCATION: "${SUPPORT_LOCATION:-}"
+      SUPPORT_HOURS: "${SUPPORT_HOURS:-}"
+      PRIVACY_CONTACT: "${PRIVACY_CONTACT:-}"
+      RETENTION_NOTICE: "${RETENTION_NOTICE:-}"
       METRICS_TOKEN: "${METRICS_TOKEN:-}"
     read_only: true
     tmpfs:
@@ -109,7 +121,7 @@ services:
     image: mysql:8.4
     profiles: ["mysql", "mysql-runtime"]
     ports:
-      - "${MYSQL_EXPOSE_PORT:-3306}:3306"
+      - "127.0.0.1:${MYSQL_EXPOSE_PORT:-3306}:3306"
     environment:
       MYSQL_DATABASE: "${MYSQL_DATABASE:-shuzhi}"
       MYSQL_USER: "${MYSQL_USER:-shuzhi_app}"

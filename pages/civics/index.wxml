@@ -1,9 +1,0 @@
-<view class="civics-page">
-  <view class="civics-banner"><text class="banner-title">成长与价值</text><text class="banner-sub">在事实、尊重与实践中形成稳定的价值判断</text></view>
-  <view class="principle-box"><text>内容用于价值引导与素养教育，不将观点差异简单等同于心理问题，不进入心理风险评分。</text></view>
-  <scroll-view class="category-scroll" scroll-x><view class="category-row"><view wx:for="{{categories}}" wx:key="*this" class="category-item {{activeCategory === item ? 'active' : ''}}" data-category="{{item}}" bindtap="onCategoryTap">{{item}}</view></view></scroll-view>
-  <view class="article-card" wx:for="{{filteredArticles}}" wx:key="id" data-id="{{item.id}}" bindtap="onArticleTap">
-    <view class="article-tag">{{item.category}}</view><text class="article-title">{{item.title}}</text><text class="article-summary">{{item.summary}}</text>
-    <view class="article-meta"><text>{{item.author}}</text><text>{{item.publishTime}}</text></view>
-  </view>
-</view>

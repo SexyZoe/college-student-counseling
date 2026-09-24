@@ -49,7 +49,7 @@ test("Web管理端与文章媒体上传闭环", async function(t) {
   await t.test("Web入口和静态资源由同一服务提供", async function() {
     let result = await request("/")
     assert.equal(result.response.status, 200)
-    assert.match(result.body, /校园管理端/)
+    assert.match(result.body, /校园心理健康平台/)
     result = await request("/web/app.js")
     assert.equal(result.response.status, 200)
     assert.match(result.response.headers.get("content-type"), /javascript/)
@@ -89,7 +89,7 @@ test("Web管理端与文章媒体上传闭环", async function(t) {
 
   let contentId
   await t.test("媒体与辅导员文章绑定并进入审核", async function() {
-    let result = await request(image.url)
+    let result = await request(image.url, { headers:{ authorization:"Bearer " + counselor } })
     assert.equal(result.response.status, 404)
     result = await request("/api/v1/counselor/content-items", {
       method:"POST", headers:{ authorization:"Bearer " + counselor, "content-type":"application/json" },
@@ -98,10 +98,12 @@ test("Web管理端与文章媒体上传闭环", async function(t) {
     assert.equal(result.response.status, 201)
     contentId = result.body.data.id
     assert.deepEqual(result.body.data.media.map(function(item) { return item.id }), [image.id, video.id])
-    result = await request(image.url)
+    result = await request(image.url, { headers:{ authorization:"Bearer " + counselor } })
     assert.equal(result.response.status, 200)
+    assert.equal((await request(image.url)).response.status, 401)
+    assert.equal((await request(image.url, { headers:{ authorization:"Bearer " + student } })).response.status, 404)
     assert.equal(result.response.headers.get("content-type"), "image/png")
-    result = await request(video.url, { headers:{ range:"bytes=4-11" } })
+    result = await request(video.url, { headers:{ range:"bytes=4-11", authorization:"Bearer " + counselor } })
     assert.equal(result.response.status, 206)
     assert.equal(result.response.headers.get("content-range"), "bytes 4-11/32")
     assert.equal(Buffer.from(result.body).length, 8)
@@ -117,6 +119,17 @@ test("Web管理端与文章媒体上传闭环", async function(t) {
     const article = result.body.data.find(function(item) { return item.id === contentId })
     assert.ok(article)
     assert.equal(article.media[0].url, image.url)
+    assert.equal((await request(image.url, { headers:{ authorization:"Bearer " + student } })).response.status, 200)
+  })
+
+  await t.test("下架后学生不能再查看文章媒体，管理员保留审核权限", async function() {
+    const result = await request("/api/v1/admin/content-items/" + contentId + "/review", {
+      method:"PATCH", headers:{ authorization:"Bearer " + admin, "content-type":"application/json" },
+      body:JSON.stringify({ status:"已退回", reviewNote:"内容修订后重新审核" })
+    })
+    assert.equal(result.response.status, 200)
+    assert.equal((await request(image.url, { headers:{ authorization:"Bearer " + student } })).response.status, 404)
+    assert.equal((await request(image.url, { headers:{ authorization:"Bearer " + admin } })).response.status, 200)
   })
 
   await new Promise(function(resolve) { server.close(resolve) })

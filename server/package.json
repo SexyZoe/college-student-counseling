@@ -17,7 +17,8 @@
     "db:mysql:smoke": "node scripts/mysql-schema-smoke.js",
     "db:sqlite:backup": "node scripts/sqlite-backup.js",
     "db:sqlite:restore-verify": "node scripts/sqlite-restore-verify.js",
-    "load:test": "node scripts/load-test.js"
+    "load:test": "node scripts/load-test.js",
+    "admin:bootstrap": "node scripts/bootstrap-admin.js"
   },
   "dependencies": {
     "mysql2": "^3.14.4"

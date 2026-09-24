@@ -32,7 +32,7 @@ CMD ["node", "scripts/mysql-migrate.js"]
 FROM ${NODE_IMAGE} AS runtime
 
 LABEL org.opencontainers.image.title="数智心港湾后端" \
-      org.opencontainers.image.description="大学生心理健康小程序后端服务"
+      org.opencontainers.image.description="校园内网心理健康网页应用"
 
 WORKDIR /app/server
 
@@ -40,6 +40,8 @@ COPY --from=dependencies --chown=node:node /app/server/node_modules ./node_modul
 COPY --chown=node:node server/src ./src
 COPY --chown=node:node server/scripts ./scripts
 COPY --chown=node:node server/web ./web
+
+COPY --chown=node:node shared /app/shared
 
 COPY --chown=node:node utils/scoring-engine.js /app/utils/scoring-engine.js
 

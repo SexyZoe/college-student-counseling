@@ -65,14 +65,15 @@ function createMediaServices(database, config, context) {
     return media
   }
 
-  async function getPublishedMedia(storageName) {
+  async function getPublishedMedia(storageName, user) {
     if (!/^[0-9a-f-]{36}\.(?:jpg|png|gif|webp|mp4|webm|mov)$/.test(String(storageName || ""))) return null
     const row = await database.prepare(`
-      SELECT ma.* FROM media_assets ma
+      SELECT ma.*, ci.status AS content_status FROM media_assets ma
       JOIN content_items ci ON ci.id = ma.content_item_id
       WHERE ma.storage_name = ?
     `).get(storageName)
-    if (!row) return null
+    if (!row || !user) return null
+    if (row.content_status !== "已发布" && user.role !== "admin" && row.owner_user_id !== user.id) return null
     return {
       path:path.join(uploadDirectory, row.storage_name),
       mimeType:row.mime_type,

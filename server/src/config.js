@@ -64,6 +64,12 @@ function loadConfig(environment) {
   }
   return {
     nodeEnv: nodeEnv,
+    schoolName:String(env.SCHOOL_NAME || "校园").trim(),
+    supportPhone:String(env.SUPPORT_PHONE || "").trim(),
+    supportLocation:String(env.SUPPORT_LOCATION || "").trim(),
+    supportHours:String(env.SUPPORT_HOURS || "").trim(),
+    privacyContact:String(env.PRIVACY_CONTACT || "").trim(),
+    retentionNotice:String(env.RETENTION_NOTICE || "").trim(),
     host: env.HOST || "127.0.0.1",
     port: integerSetting(env, "PORT", 8787, 1, 65535),
     databasePath: env.DATABASE_PATH || path.join(__dirname, "..", "data", "app.db"),

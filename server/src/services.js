@@ -16,6 +16,9 @@ const { createPersonnelImportServices } = require("./personnel-import-service")
 const { createMediaServices } = require("./media-service")
 const { createCounselorAdminServices } = require("./counselor-admin-service")
 const scoringEngine = require("../../utils/scoring-engine")
+const assessmentCatalog = require("../../shared/assessments.json")
+const faqCatalog = require("../../shared/faq.json")
+const CONSENT_VERSION = "campus-web-2026-09-v1"
 
 const ROLES = ["student", "counselor", "admin"]
 const RISK_LEVELS = ["正常", "关注", "较高风险", "紧急风险"]
@@ -270,7 +273,8 @@ function createServices(database, config, options) {
     const clientCreatedAt = String(payload.createdAt || nowIso())
     if (isNaN(new Date(clientCreatedAt).getTime())) throw new HttpError(422, "INVALID_RESULT", "createdAt 不合法")
 
-    const saved = await inTransaction(database, async function() {
+    let saved
+    try { saved = await inTransaction(database, async function() {
       const createdAt = nowIso()
       const insert = await database.prepare(`
         INSERT INTO assessment_results
@@ -298,10 +302,54 @@ function createServices(database, config, options) {
           VALUES (?, ?, ?, ?, ?, ?, ?, '待确认', ?, ?)
         `).run(resultId, user.id, user.class_id, semester.id, riskLevel, task ? task.title : assessmentName, summary, createdAt, createdAt)
       }
-      await audit(user.id, "提交测评结果", "assessment_result", resultId, { submissionId: submissionId, riskLevel: riskLevel })
+      await audit(user.id, "提交测评结果", "assessment_result", resultId, { submissionId: submissionId, riskLevel: riskLevel, consentVersion:payload.webConsentVersion || null, consentAt:payload.webConsentVersion ? createdAt : null })
       return database.prepare("SELECT * FROM assessment_results WHERE id = ?").get(resultId)
     })
+    } catch (error) {
+      // A concurrent retry may win the UNIQUE submission_id insert before this transaction.
+      const committed = await database.prepare("SELECT * FROM assessment_results WHERE submission_id = ?").get(submissionId)
+      if (committed && committed.student_user_id === user.id) return { result:mapResultSummary(committed), idempotent:true }
+      throw error
+    }
     return { result: mapResultSummary(saved), idempotent: false }
+  }
+
+  async function getStudentCatalog(user) {
+    requireRole(user, "student")
+    return { assessments:assessmentCatalog, faq:faqCatalog, consentVersion:CONSENT_VERSION }
+  }
+
+  async function submitWebAssessment(user, input) {
+    requireRole(user, "student")
+    input = input || {}
+    if (input.consent !== true || input.consentVersion !== CONSENT_VERSION) {
+      throw new HttpError(422, "CONSENT_REQUIRED", "请阅读并同意当前测评信息处理说明")
+    }
+    const assessment = assessmentCatalog.find(item => item.id === input.assessmentId)
+    if (!assessment || !input.answers || typeof input.answers !== "object" || Array.isArray(input.answers)) {
+      throw new HttpError(422, "INVALID_ANSWERS", "测评或答案格式不正确")
+    }
+    if (input.questionnaireVersion !== assessment.questionnaireVersion || input.scoringVersion !== assessment.scoringVersion) {
+      throw new HttpError(409, "VERSION_MISMATCH", "问卷版本已变化，请刷新后重新确认")
+    }
+    const keys = Object.keys(input.answers)
+    if (keys.length !== assessment.questions.length || keys.some(key => !/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= assessment.questions.length)) {
+      throw new HttpError(422, "INVALID_ANSWERS", "请完成全部题目后提交")
+    }
+    const answerSnapshot = assessment.questions.map((q, index) => {
+      const selectedIndex = input.answers[index]
+      if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= q.options.length) {
+        throw new HttpError(422, "INVALID_ANSWERS", "答案选项不正确")
+      }
+      return { questionId:q.id, selectedIndex }
+    })
+    const scored = calculateServerScore(assessment.id, assessment.questionnaireVersion, assessment.scoringVersion, answerSnapshot)
+    const snapshot = scoringEngine.createResultSnapshot({
+      assessment, questions:assessment.questions, rule:scored.rule, outcome:scored.outcome, now:new Date(now())
+    })
+    return submitAssessmentResult(user, Object.assign(snapshot, {
+      submissionId:input.submissionId, taskId:input.taskId || "", webConsentVersion:CONSENT_VERSION
+    }))
   }
 
   async function getMyResults(user) {
@@ -720,8 +768,8 @@ function createServices(database, config, options) {
     requireRole(user, "admin")
     const item = await database.prepare("SELECT * FROM content_items WHERE id = ?").get(Number(contentId))
     if (!item) throw new HttpError(404, "CONTENT_NOT_FOUND", "内容不存在")
-    if (item.status !== "待审核") throw new HttpError(409, "CONTENT_ALREADY_REVIEWED", "内容已经完成审核")
     const status = String(input && input.status || "")
+    if (item.status !== "待审核" && !(item.status === "已发布" && status === "已退回")) throw new HttpError(409, "CONTENT_ALREADY_REVIEWED", "内容已经完成审核")
     if (["已发布", "已退回"].indexOf(status) === -1) throw new HttpError(422, "INVALID_STATUS", "审核状态只能是已发布或已退回")
     const reviewNote = String(input && input.reviewNote || "").trim().slice(0, 500)
     if (status === "已退回" && !reviewNote) throw new HttpError(422, "REVIEW_NOTE_REQUIRED", "退回内容必须填写原因")
@@ -794,6 +842,8 @@ function createServices(database, config, options) {
     listAssessmentTasks,
     submitAssessmentResult,
     getMyResults,
+    getStudentCatalog,
+    submitWebAssessment,
     listCounselorClasses,
     classSummary,
     listRiskEvents,
