@@ -37,12 +37,30 @@
   "simulatorPluginLibVersion": {},
   "packOptions": {
     "ignore": [
-      { "value": "server", "type": "folder" },
-      { "value": "deploy", "type": "folder" },
-      { "value": "backups", "type": "folder" },
-      { "value": ".env", "type": "file" },
-      { "value": "compose.yaml", "type": "file" },
-      { "value": "compose.override.yaml", "type": "file" },
+      {
+        "value": "server",
+        "type": "folder"
+      },
+      {
+        "value": "deploy",
+        "type": "folder"
+      },
+      {
+        "value": "backups",
+        "type": "folder"
+      },
+      {
+        "value": ".env",
+        "type": "file"
+      },
+      {
+        "value": "compose.yaml",
+        "type": "file"
+      },
+      {
+        "value": "compose.override.yaml",
+        "type": "file"
+      },
       {
         "value": ".git",
         "type": "folder"
