@@ -385,16 +385,18 @@ async function serveWebAsset(response, requestPath, configuredRoot) {
     "/web/styles.css":"styles.css",
     "/web/student.js":"student.js",
     "/web/personality.js":"personality.js",
-    "/web/campus.css":"campus.css"
+    "/web/campus.css":"campus.css",
+    "/web/miniprogram.css":"miniprogram.css"
   }
-  const name = files[requestPath]
+  const legacyImage = requestPath.match(/^\/web\/images\/(logo(?:_small)?\.png|banners\/banner_[123]\.png|avatars\/avatar_[123]\.png|articles\/article_(?:growth|mood|anxiety|social|stress|love)\.png)$/)
+  const name = files[requestPath] || (legacyImage ? "images/" + legacyImage[1] : null)
   if (!name) throw new HttpError(404, "NOT_FOUND", "页面不存在")
   const root = configuredRoot || pathModule.join(__dirname, "..", "web")
   let body
   try { body = await fs.promises.readFile(pathModule.join(root, name)) }
   catch (error) { throw new HttpError(404, "NOT_FOUND", "Web 管理端资源不存在") }
   response.statusCode = 200
-  response.setHeader("Content-Type", name.endsWith(".html") ? "text/html; charset=utf-8" : (name.endsWith(".js") ? "text/javascript; charset=utf-8" : "text/css; charset=utf-8"))
+  response.setHeader("Content-Type", name.endsWith(".html") ? "text/html; charset=utf-8" : (name.endsWith(".js") ? "text/javascript; charset=utf-8" : (name.endsWith(".png") ? "image/png" : "text/css; charset=utf-8")))
   response.setHeader("Cache-Control", "no-cache")
   response.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
   response.end(body)

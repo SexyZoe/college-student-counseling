@@ -20,7 +20,7 @@ const {createHttpApp} = require('../server/src/app');
     browser=await engine.launch({headless:true,...(process.env.BROWSER_CHANNEL&&engine===chromium?{channel:process.env.BROWSER_CHANNEL}:{})});
     const errors=[];
     async function context(width=390){const c=await browser.newContext({viewport:{width,height:844}});const p=await c.newPage();p.on('pageerror',e=>errors.push(e.message));p.on('dialog',d=>d.accept());return {c,p}}
-    async function login(p,role,account,password){await p.goto(base+'/web/');await p.locator('#login-role').selectOption(role);await p.locator('#login-account').fill(account);await p.locator('#login-password').fill(password);await p.locator('#login-form button').click()}
+    async function login(p,role,account,password){await p.goto(base+'/web/');await p.locator('#login-role').selectOption(role);await p.locator('#login-account').fill(account);await p.locator('#login-password').fill(password);await p.locator('#login-form button[type=submit]').click()}
     async function go(p,route,selector){await p.evaluate(route=>location.hash=route,route);await p.waitForFunction(route=>window.Campus?.state.view===route,route);await p.locator(selector).first().waitFor()}
     const student=await context();const p=student.p;
     await login(p,'student','2024001','123456');await p.getByText('你好，张同学。').waitFor();
@@ -28,6 +28,8 @@ const {createHttpApp} = require('../server/src/app');
     assert.equal(await p.evaluate(()=>document.cookie.includes('campus_session')),false);
     const overflow=await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth);assert.equal(overflow,false);
     fs.mkdirSync(path.resolve('artifacts'),{recursive:true});await p.screenshot({path:'artifacts/student-home-mobile.png',fullPage:true});
+    await go(p,'assessments','.mini-assessment-card');assert.equal(await p.locator('.mini-category').first().getAttribute('aria-selected'),'true');await p.screenshot({path:'artifacts/student-assessments-mobile.png',fullPage:true});
+    await go(p,'account','#account-logout');assert.equal(await p.locator('.mini-mine-head').count(),1);await p.screenshot({path:'artifacts/student-account-mobile.png',fullPage:true});
     await go(p,'quiz/1','#assessment-consent');assert.equal(await p.locator('#start-quiz').isDisabled(),true);
     await p.locator('#assessment-consent').check();await p.locator('#start-quiz').click();
     await p.locator('input[name=answer]').nth(1).check();await p.locator('#next').click();
@@ -42,8 +44,9 @@ const {createHttpApp} = require('../server/src/app');
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM assessment_results').get().n,1);
     await p.screenshot({path:'artifacts/student-result-mobile.png',fullPage:true});
     await go(p,'history','#history-filter');await p.locator('#history-filter').selectOption('1');await p.getByRole('button',{name:'查看结果',exact:true}).waitFor();
-    for(const [route,selector] of [['reading','#article-search'],['civics','#article-search'],['faq','#faq-search'],['help','a[href="tel:120"]'],['privacy','.article-body'],['personality/quiz','[data-choice]']]) await go(p,route,selector);
-    for(let i=0;i<28;i++)await p.locator('[data-choice="0"]').click();await p.getByText('探索结果',{exact:true}).waitFor();
+    for(const [route,selector] of [['reading','#article-search'],['civics','#article-search'],['faq','#faq-search'],['help','a[href="tel:120"]'],['privacy','.article-body'],['personality/quiz','[data-choice]']]) {await go(p,route,selector);assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,route+' overflows mobile viewport')}
+    await p.locator('[data-choice="0"]').click();await p.reload();await p.locator('.mini-personality-progress').waitFor();assert.match(await p.locator('.mini-personality-progress').innerText(),/2 \/ 28/);
+    for(let i=1;i<28;i++)await p.locator('[data-choice="0"]').click();await p.getByText('探索结果',{exact:true}).waitFor();
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM assessment_results').get().n,1);
     const admin=await context(1365);await login(admin.p,'admin','admin','123456');await admin.p.getByText('学生账号',{exact:true}).first().waitFor();
     await go(admin.p,'tasks','#task-form');await admin.p.locator('[name=title]').fill('浏览器迁移测试任务');await admin.p.locator('[name=deadline]').fill('2026-12-20');await admin.p.locator('#task-form button').click();await admin.p.getByRole('cell',{name:'浏览器迁移测试任务',exact:true}).waitFor();
@@ -60,7 +63,7 @@ const {createHttpApp} = require('../server/src/app');
     await go(admin.p,'content','.approve');const article=admin.p.locator('article').filter({hasText:'浏览器测试文章'});await article.locator('.approve').click();await article.getByText('已发布',{exact:true}).waitFor();
     await go(p,'reading','#article-search');await p.getByRole('heading',{name:'浏览器测试文章'}).waitFor();
     await p.route('**/api/v1/content-items?type=psychoeducation',async route=>{await new Promise(r=>setTimeout(r,300));await route.continue()});
-    await go(p,'dashboard','.student-hero');
+    await go(p,'dashboard','.mini-home-head');
     await p.evaluate(()=>location.hash='reading');await p.waitForFunction(()=>window.Campus.state.view==='reading');
     await go(p,'privacy','.article-body');await p.waitForTimeout(500);assert.equal(await p.getByRole('heading',{name:'关于你的信息'}).count(),1);
     await go(p,'account','#account-logout');await p.locator('#account-logout').click();await p.locator('#login-form').waitFor();
