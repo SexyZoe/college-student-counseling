@@ -63,7 +63,7 @@ const {createHttpApp} = require('../server/src/app');
     await go(p,'dashboard','.student-hero');
     await p.evaluate(()=>location.hash='reading');await p.waitForFunction(()=>window.Campus.state.view==='reading');
     await go(p,'privacy','.article-body');await p.waitForTimeout(500);assert.equal(await p.getByRole('heading',{name:'关于你的信息'}).count(),1);
-    await p.locator('#menu').click();await p.locator('#logout').click();await p.locator('#login-form').waitFor();
-    assert.deepEqual(errors,[]);console.log('PASS: mobile login, consent, refresh recovery, offline retry, scoring, history, personality, first-login setup, task publication, semester, roster import, counselor scope/follow-up, article review, logout; no JS errors or mobile overflow');
+    await go(p,'account','#account-logout');await p.locator('#account-logout').click();await p.locator('#login-form').waitFor();
+    assert.deepEqual(errors,[]);console.log('PASS: mobile login, consent, refresh recovery, offline retry, scoring, history, personality, first-login setup, task publication, semester, roster import, counselor scope/follow-up, article review, account-page logout; no JS errors or mobile overflow');
   }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));db.close();fs.rmSync(dir,{recursive:true,force:true})}
 })().catch(error=>{console.error(error);process.exitCode=1});
