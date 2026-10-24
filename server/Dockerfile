@@ -29,6 +29,10 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
 USER node
 CMD ["node", "scripts/mysql-migrate.js"]
 
+FROM scratch AS document-packages
+# An optional named build context can supply signed APKs on slow campus networks.
+COPY .dockerignore /no-cached-packages
+
 FROM ${NODE_IMAGE} AS runtime
 
 LABEL org.opencontainers.image.title="数智心港湾后端" \
@@ -39,10 +43,15 @@ WORKDIR /app/server
 ARG ALPINE_MIRROR=""
 # School networks can select a reachable Alpine mirror at build time.
 # Install document tools before application copies so code releases reuse this layer.
-RUN if [ -n "$ALPINE_MIRROR" ]; then \
+RUN --mount=type=bind,from=document-packages,target=/packages \
+    if [ -n "$ALPINE_MIRROR" ]; then \
       sed -i "s|https://dl-cdn.alpinelinux.org/alpine|$ALPINE_MIRROR|g" /etc/apk/repositories; \
     fi \
-    && apk add --no-cache libreoffice-writer font-noto-cjk font-dejavu \
+    && if [ -f /packages/.ready ]; then \
+      apk add --no-network /packages/*.apk; \
+    else \
+      apk add --no-cache libreoffice-writer font-noto-cjk font-dejavu; \
+    fi \
     && mkdir -p /app/data /app/data/uploads /app/backups \
     && chown -R node:node /app \
     && rm -rf /usr/local/lib/node_modules/npm \
