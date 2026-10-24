@@ -33,6 +33,9 @@ jobs:
       - name: Audit backend tooling dependencies
         run: npm --prefix server audit --audit-level=high
 
+      - name: Install document conversion dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libreoffice-writer fonts-noto-cjk fonts-dejavu-core
+
       - name: Run all automated tests
         run: npm test
 
@@ -223,6 +226,7 @@ jobs:
           GENERAL_RATE_LIMIT_PER_MINUTE: 10000
           LOGIN_RATE_LIMIT_PER_MINUTE: 1000
           BASE_URL: http://127.0.0.1:18788
+          CONTRACT_TEST_ALLOW_WRITES: "true"
         run: |
           npm --prefix server start >mysql-runtime.log 2>&1 &
           SERVER_PID=$!

@@ -15,6 +15,8 @@ const { createStudentAccountServices } = require("./student-account-service")
 const { createPersonnelImportServices } = require("./personnel-import-service")
 const { createMediaServices } = require("./media-service")
 const { createCounselorAdminServices } = require("./counselor-admin-service")
+const { createRegistryServices } = require("./registry-service")
+const { createTalkServices } = require("./talk-service")
 const scoringEngine = require("../../utils/scoring-engine")
 const assessmentCatalog = require("../../shared/assessments.json")
 const faqCatalog = require("../../shared/faq.json")
@@ -106,6 +108,7 @@ function createServices(database, config, options) {
 
   async function login(credentials) {
     const role = credentials && credentials.role
+    if (config.staffOnly !== false && role === "student") throw new HttpError(403, "STAFF_ONLY", "本系统仅供管理员和辅导员使用")
     const accountId = normalizeAccountId(credentials && credentials.accountId)
     const password = String(credentials && credentials.password || "")
     if (ROLES.indexOf(role) === -1 || !accountId || !password) {
@@ -156,6 +159,7 @@ function createServices(database, config, options) {
     }
     const user = await database.prepare("SELECT * FROM users WHERE id = ? AND active = 1").get(payload.sub)
     if (!user || user.role !== payload.role || Number(user.auth_version || 0) !== Number(payload.ver || 0)) throw new HttpError(401, "INVALID_TOKEN", "登录身份已失效")
+    if (config.staffOnly !== false && user.role === "student") throw new HttpError(401, "INVALID_TOKEN", "学生登录入口已停用")
     return user
   }
 
@@ -830,7 +834,10 @@ function createServices(database, config, options) {
     return result
   }
 
+  const registryServices = createRegistryServices(database, { requireRole, audit, nowIso, dataProtector })
   return {
+    ...registryServices,
+    ...createTalkServices(database, config, { requireRole, audit, nowIso, dataProtector, getRegistryStudent:registryServices.getRegistryStudent }),
     ...counselorAdministration,
     ...createStudentAccountServices(database, { requireRole, publicUser, audit, nowIso, dataProtector }),
     getAccount: publicUser,

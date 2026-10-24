@@ -10,7 +10,7 @@
     "start": "node server/src/index.js",
     "server": "node server/src/index.js",
     "test": "node tests/scoring-engine.test.js && node --test server/test/*.test.js",
-    "test:web": "node scripts/web-e2e.js",
+    "test:web": "node scripts/web-e2e.js && node scripts/talks-e2e.js",
     "server:test": "node --test server/test/*.test.js",
     "check:release": "node scripts/release-check.js"
   },

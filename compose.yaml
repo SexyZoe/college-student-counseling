@@ -33,6 +33,8 @@ services:
       SUPPORT_HOURS: "${SUPPORT_HOURS:-}"
       PRIVACY_CONTACT: "${PRIVACY_CONTACT:-}"
       RETENTION_NOTICE: "${RETENTION_NOTICE:-}"
+      DOCUMENT_CONVERTER_PATH: "${DOCUMENT_CONVERTER_PATH:-/usr/bin/soffice}"
+      DOCUMENT_FONTS_EXACT: "${DOCUMENT_FONTS_EXACT:-false}"
       METRICS_TOKEN: "${METRICS_TOKEN:-}"
     volumes:
       - backend-data:/app/data
@@ -93,6 +95,8 @@ services:
       SUPPORT_HOURS: "${SUPPORT_HOURS:-}"
       PRIVACY_CONTACT: "${PRIVACY_CONTACT:-}"
       RETENTION_NOTICE: "${RETENTION_NOTICE:-}"
+      DOCUMENT_CONVERTER_PATH: "${DOCUMENT_CONVERTER_PATH:-/usr/bin/soffice}"
+      DOCUMENT_FONTS_EXACT: "${DOCUMENT_FONTS_EXACT:-false}"
       METRICS_TOKEN: "${METRICS_TOKEN:-}"
     read_only: true
     tmpfs:

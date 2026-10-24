@@ -94,6 +94,44 @@ function createHttpApp(services, config, options) {
       if (user.must_change_password) {
         throw new HttpError(403, "PASSWORD_CHANGE_REQUIRED", "请先修改临时密码")
       }
+      if (path === "/api/v1/counselor/profile" && ["GET", "PATCH"].includes(request.method)) {
+        return sendOk(response, await services.counselorProfile(user, request.method === "PATCH" ? await readJson(request, config.maxBodyBytes) : undefined))
+      }
+      const registryFilters = Object.fromEntries(url.searchParams)
+      if (request.method === "GET" && path === "/api/v1/talk-records/options") return sendOk(response, await services.getTalkMetadata(user))
+      if (request.method === "GET" && path === "/api/v1/talk-records") return sendOk(response, await services.listTalkRecords(user, registryFilters))
+      if (request.method === "POST" && path === "/api/v1/talk-records") return sendOk(response, await services.saveTalkRecord(user, await readJson(request, config.maxBodyBytes)), 201)
+      const talkDocument = path.match(/^\/api\/v1\/talk-records\/([^/]+)\/document$/)
+      if (request.method === "GET" && talkDocument) {
+        enforceRateLimit(limiter, response, "talk-document:" + user.id, 15)
+        const result = await services.exportTalkDocument(user, talkDocument[1], registryFilters)
+        response.setHeader("Content-Type", result.mimeType)
+        response.setHeader("Content-Disposition", (registryFilters.preview === "1" ? "inline" : "attachment") + "; filename=talk-form." + (registryFilters.format || "pdf") + "; filename*=UTF-8''" + encodeURIComponent(result.fileName))
+        response.setHeader("X-Frame-Options", "SAMEORIGIN")
+        response.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'self'")
+        return response.end(result.buffer)
+      }
+      const talkRecord = path.match(/^\/api\/v1\/talk-records\/([^/]+)$/)
+      if (talkRecord && request.method === "GET") return sendOk(response, await services.getTalkRecord(user, talkRecord[1]))
+      if (talkRecord && request.method === "PATCH") return sendOk(response, await services.saveTalkRecord(user, await readJson(request, config.maxBodyBytes), talkRecord[1]))
+      if (request.method === "GET" && path === "/api/v1/registry/students") return sendOk(response, await services.listRegistryStudents(user, registryFilters))
+      if (request.method === "POST" && path === "/api/v1/registry/students") return sendOk(response, await services.saveRegistryStudent(user, await readJson(request, config.maxBodyBytes)), 201)
+      if ((request.method === "GET" || (request.method === "POST" && path.endsWith("/export"))) && ["/api/v1/registry/export", "/api/v1/registry/template"].includes(path)) {
+        const buffer = await services.exportRegistryWorkbook(user, request.method === "POST" ? await readJson(request, config.maxBodyBytes) : registryFilters, path.endsWith("/template"))
+        response.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response.setHeader("Content-Disposition", "attachment; filename=student-registry.xlsx; filename*=UTF-8''" + encodeURIComponent(path.endsWith("/template") ? "学生登记模板.xlsx" : "心理问题学生注册表.xlsx"))
+        return response.end(buffer)
+      }
+      if (["GET", "POST"].includes(request.method) && path === "/api/v1/registry/print") return sendOk(response, await services.printRegistryStudents(user, request.method === "POST" ? await readJson(request, config.maxBodyBytes) : registryFilters))
+      if (request.method === "POST" && path === "/api/v1/registry/import/preview") {
+        if (!["admin", "counselor"].includes(user.role)) throw new HttpError(403, "FORBIDDEN", "当前账号无权导入")
+        return sendOk(response, await services.previewRegistryImport(user, await readBinary(request, 5 * 1024 * 1024), registryFilters), 201)
+      }
+      const registryConfirm = path.match(/^\/api\/v1\/registry\/import\/([^/]+)\/confirm$/)
+      if (request.method === "POST" && registryConfirm) return sendOk(response, await services.confirmRegistryImport(user, registryConfirm[1], await readJson(request, config.maxBodyBytes)))
+      const registryStudent = path.match(/^\/api\/v1\/registry\/students\/([^/]+)$/)
+      if (registryStudent && request.method === "GET") return sendOk(response, await services.getRegistryStudent(user, registryStudent[1]))
+      if (registryStudent && request.method === "PATCH") return sendOk(response, await services.saveRegistryStudent(user, await readJson(request, config.maxBodyBytes), registryStudent[1]))
       if (user.role === "student" && !user.profile_completed) {
         throw new HttpError(403, "ACCOUNT_SETUP_REQUIRED", "请先填写姓名并修改初始密码")
       }
@@ -268,6 +306,8 @@ function routeLabel(pathname) {
   return String(pathname || "/")
     .replace(/\/$/, "")
     .replace(/\/media\/[^/]+/g, "/media/:id")
+    .replace(/\/registry\/import\/(?!preview(?:\/|$))[^/]+/g, "/registry/import/:id")
+    .replace(/\/talk-records\/(?!options(?:\/|$))[^/]+/g, "/talk-records/:id")
     .replace(/\/(classes|risk-events|students|counselors|semesters|import-batches)\/[^/]+/g, "/$1/:id") || "/"
 }
 
@@ -382,6 +422,9 @@ async function serveWebAsset(response, requestPath, configuredRoot) {
     "/web/":"index.html",
     "/web/index.html":"index.html",
     "/web/app.js":"app.js",
+    "/web/registry.js":"registry.js",
+    "/web/registry.css":"registry.css",
+    "/web/talks.js":"talks.js",
     "/web/styles.css":"styles.css",
     "/web/student.js":"student.js",
     "/web/personality.js":"personality.js",
@@ -398,7 +441,7 @@ async function serveWebAsset(response, requestPath, configuredRoot) {
   response.statusCode = 200
   response.setHeader("Content-Type", name.endsWith(".html") ? "text/html; charset=utf-8" : (name.endsWith(".js") ? "text/javascript; charset=utf-8" : (name.endsWith(".png") ? "image/png" : "text/css; charset=utf-8")))
   response.setHeader("Cache-Control", "no-cache")
-  response.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+  response.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; frame-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
   response.end(body)
 }
 

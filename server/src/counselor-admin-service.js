@@ -29,7 +29,7 @@ function createCounselorAdminServices(database, context) {
     input = input || {}
     const staffId = String(input.staffId || "").trim().toUpperCase()
     const accountId = normalizeAccountId(staffId)
-    const displayName = String(input.displayName || "").trim()
+    const displayName = String(input.displayName || staffId).trim()
     if (!/^[A-Z0-9][A-Z0-9_-]{1,31}$/.test(staffId)) {
       throw new HttpError(422, "COUNSELOR_STAFF_ID_INVALID", "工号需为2至32位字母、数字、下划线或短横线")
     }

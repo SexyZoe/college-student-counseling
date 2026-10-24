@@ -40,12 +40,14 @@ COPY --from=dependencies --chown=node:node /app/server/node_modules ./node_modul
 COPY --chown=node:node server/src ./src
 COPY --chown=node:node server/scripts ./scripts
 COPY --chown=node:node server/web ./web
+COPY --chown=node:node server/templates ./templates
 
 COPY --chown=node:node shared /app/shared
 
 COPY --chown=node:node utils/scoring-engine.js /app/utils/scoring-engine.js
 
-RUN mkdir -p /app/data /app/data/uploads /app/backups \
+RUN apk add --no-cache libreoffice-writer font-noto-cjk font-dejavu \
+    && mkdir -p /app/data /app/data/uploads /app/backups \
     && chown -R node:node /app \
     && rm -rf /usr/local/lib/node_modules/npm \
               /usr/local/lib/node_modules/corepack \
@@ -58,6 +60,7 @@ ENV UV_THREADPOOL_SIZE=8
 ENV HOST=0.0.0.0
 ENV PORT=8787
 ENV DATABASE_PATH=/app/data/app.db
+ENV DOCUMENT_CONVERTER_PATH=/usr/bin/soffice
 
 EXPOSE 8787
 

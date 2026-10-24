@@ -2,34 +2,18 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#f4a3a8">
-  <title>数智心港湾 · 校园心理健康平台</title>
-  <link rel="stylesheet" href="/web/styles.css">
-  <link rel="stylesheet" href="/web/campus.css">
-  <link rel="stylesheet" href="/web/miniprogram.css">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#183d42">
+  <title>数智心港湾 · 学生心理关怀档案</title>
+  <link rel="stylesheet" href="/web/registry.css">
+  <script src="/web/talks.js" defer></script>
+  <script src="/web/registry.js" defer></script>
 </head>
 <body>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <main id="root">
-    <section class="login-shell legacy-login">
-      <form id="login-form" class="login-card">
-        <div class="login-logo"><img src="/web/images/logo.png" alt="数智心港湾标志"></div>
-        <h1>数智心港湾</h1>
-        <p class="login-subtitle">大学生心理健康支持平台</p>
-        <select id="login-role" class="visually-hidden" aria-label="登录身份"><option value="student">学生</option><option value="counselor">辅导员</option><option value="admin">管理员</option></select>
-        <div class="role-tabs" role="tablist" aria-label="选择登录身份"><button type="button" data-role="student" class="active" role="tab" aria-selected="true">学生</button><button type="button" data-role="counselor" role="tab" aria-selected="false">辅导员</button><button type="button" data-role="admin" role="tab" aria-selected="false">管理员</button></div>
-        <p class="role-description" id="role-description">使用学校导入的学号和本系统密码登录。</p>
-        <label class="login-field">学号或账号<span class="login-input-wrap"><span aria-hidden="true">○</span><input id="login-account" autocomplete="username" required placeholder="请输入学号"></span></label>
-        <label class="login-field">独立密码<span class="login-input-wrap"><span aria-hidden="true">⌑</span><input id="login-password" type="password" autocomplete="current-password" required placeholder="请输入本系统独立密码"><button type="button" id="toggle-password" aria-label="显示密码">显示</button></span></label>
-        <button class="button primary wide login-submit" type="submit">登录</button>
-        <p class="login-note">请连接校园 Wi-Fi。本系统仅供学校授权人员使用。</p>
-      </form>
-    </section>
-  </main>
-  <noscript>请启用浏览器 JavaScript 后使用校园平台。</noscript>
-  <script src="/web/personality.js" defer></script>
-  <script src="/web/student.js" defer></script>
-  <script src="/web/app.js" defer></script>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <div id="root"><p class="loading">正在连接档案管理系统…</p></div>
+  <dialog id="modal" aria-labelledby="dialog-title"></dialog>
+  <section id="print-sheet" aria-label="打印登记表"></section>
+  <noscript>请启用 JavaScript 后使用本系统。</noscript>
 </body>
 </html>

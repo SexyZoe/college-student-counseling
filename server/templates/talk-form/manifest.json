@@ -1,0 +1,71 @@
+{
+  "originalSha256": "9eb703f24d13b978c35669ba1da44d8453a1903ddfcca53a394e0b68bf2275d7",
+  "docxSha256": "6a768cf4858fab20aeaaebf26342039e7afdc5fea7a1ddd0469ec4fccdbb48f3",
+  "parts": {
+    "docProps/core.xml": {
+      "sha256": "e1368875390cd90acdafe95da1de4a7a9533d8c1bf1adcf5cd83ba4f24330da2",
+      "bytes": 802,
+      "mode": "preserve-only"
+    },
+    "docProps/app.xml": {
+      "sha256": "cfed71406cd89574ab02164b38b58d2f2ce3d822ffd6d28557d4cdee54d369b2",
+      "bytes": 468,
+      "mode": "preserve-only"
+    },
+    "docProps/custom.xml": {
+      "sha256": "ddd088699badf71cfbf787e59d39068124a479978a3f6ab9b0b9efbf35f9c28d",
+      "bytes": 749,
+      "mode": "preserve-only"
+    },
+    "_rels/.rels": {
+      "sha256": "3823de16366678a094490aa4983c96c800dd02d98852331736bf558c1f6ebfcf",
+      "bytes": 720,
+      "mode": "preserve-only"
+    },
+    "word/_rels/document.xml.rels": {
+      "sha256": "ca70b869873bdbb9b298a806e1e3fe68668de505994fcaf3b697a5a9506788b0",
+      "bytes": 924,
+      "mode": "preserve-only"
+    },
+    "word/numbering.xml": {
+      "sha256": "fd5daf9c4a80d0795ae134cca6186010ddb6243bb5d2090c864825815e7a6cbe",
+      "bytes": 2791,
+      "mode": "preserve-only"
+    },
+    "word/theme/theme1.xml": {
+      "sha256": "8c817dba7260b1c6e49fc7937dd857b5f42d834bc8c33769d788ea824cb2c29f",
+      "bytes": 2257,
+      "mode": "preserve-only"
+    },
+    "word/settings.xml": {
+      "sha256": "a2cdc3f20d236d45a0594eb5813d9a9964e12706d2c1f64937323090ff6a5a22",
+      "bytes": 575,
+      "mode": "preserve-only"
+    },
+    "word/fontTable.xml": {
+      "sha256": "cff30624449c6ab1bb079e664f90d134c6bb5445871f24bc020b8fcedc4a891c",
+      "bytes": 1181,
+      "mode": "preserve-only"
+    },
+    "word/styles.xml": {
+      "sha256": "a8e82c6599ec98eb9296b5754dd22efca6a4a959c01240d7201aec14f5508b41",
+      "bytes": 8282,
+      "mode": "preserve-only"
+    },
+    "word/header1.xml": {
+      "sha256": "65fa98ee7627714d21cdd5a777a725d7e6086273cf2122adcaca26b23261f2c4",
+      "bytes": 1207,
+      "mode": "preserve-only"
+    },
+    "word/document.xml": {
+      "sha256": "5c94996b43d027edd38d89a06a777e4a8893587b92a6c57987e879e6b7ee929e",
+      "bytes": 20581,
+      "mode": "editable"
+    },
+    "[Content_Types].xml": {
+      "sha256": "14f54f054ca6b33960f6f28b09861c7e03051b00318b30b4edd644b2bb4759d9",
+      "bytes": 1713,
+      "mode": "preserve-only"
+    }
+  }
+}

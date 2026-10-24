@@ -10,7 +10,7 @@ const assessments=require('../../shared/assessments.json');
 test('校园网页：Cookie、CSRF、8套量表、同意留痕、幂等和角色隔离',async t=>{
   const db=openDatabase(':memory:');await seedDemoData(db);
   const config={authSecret:'campus-web-test-secret',tokenTtlSeconds:3600,maxBodyBytes:1048576,logLevel:'error',generalRateLimitPerMinute:10000,loginRateLimitPerMinute:1000};
-  const services=createServices(db,config,{now:()=>Date.parse('2026-09-24T04:00:00Z')});
+  const services=createServices(db,{...config,staffOnly:false},{now:()=>Date.parse('2026-09-24T04:00:00Z')});
   const server=http.createServer(createHttpApp(services,config));await new Promise(r=>server.listen(0,'127.0.0.1',r));
   t.after(async()=>{await new Promise(r=>server.close(r));db.close()});
   const base='http://127.0.0.1:'+server.address().port;

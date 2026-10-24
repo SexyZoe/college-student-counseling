@@ -14,6 +14,7 @@ backups/
 compose.override.yaml
 
 artifacts/
+outputs/
 playwright-report/
 test-results/
 *.pem

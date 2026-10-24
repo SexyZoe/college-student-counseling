@@ -1,11 +1,14 @@
 const fs = require("node:fs")
 const path = require("node:path")
 const crypto = require("node:crypto")
+const { AsyncLocalStorage } = require("node:async_hooks")
 const { DatabaseSync } = require("node:sqlite")
 const { createPasswordRecord, normalizeAccountId } = require("./security")
 const { createMysqlDatabase } = require("./mysql-database")
 
 const SQLITE_MIGRATIONS_DIRECTORY = path.join(__dirname, "migrations", "sqlite")
+const sqliteTransactionQueue = new WeakMap()
+const sqliteTransactionContext = new AsyncLocalStorage()
 
 function migrationChecksum(sql) {
   return crypto.createHash("sha256").update(sql).digest("hex")
@@ -65,14 +68,27 @@ function openDatabase(filename) {
 
 async function inTransaction(database, callback) {
   if (database.transaction) return database.transaction(callback)
-  database.exec("BEGIN IMMEDIATE")
+  if (sqliteTransactionContext.getStore() === database) return callback()
+  const preceding = sqliteTransactionQueue.get(database) || Promise.resolve()
+  let release
+  const pending = new Promise(resolve => { release = resolve })
+  sqliteTransactionQueue.set(database, pending)
+  await preceding
   try {
-    const result = await callback()
-    database.exec("COMMIT")
-    return result
-  } catch (error) {
-    database.exec("ROLLBACK")
-    throw error
+    return await sqliteTransactionContext.run(database, async () => {
+      database.exec("BEGIN IMMEDIATE")
+      try {
+        const result = await callback()
+        database.exec("COMMIT")
+        return result
+      } catch (error) {
+        database.exec("ROLLBACK")
+        throw error
+      }
+    })
+  } finally {
+    release()
+    if (sqliteTransactionQueue.get(database) === pending) sqliteTransactionQueue.delete(database)
   }
 }
 

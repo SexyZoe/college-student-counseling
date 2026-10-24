@@ -23,7 +23,7 @@ test("Web管理端与文章媒体上传闭环", async function(t) {
     webRoot:path.join(__dirname, "..", "web"),
     logLevel:"error"
   }
-  const server = http.createServer(createHttpApp(createServices(database, config), config))
+  const server = http.createServer(createHttpApp(createServices(database, { ...config, staffOnly:false }), config))
   await new Promise(function(resolve) { server.listen(0, "127.0.0.1", resolve) })
   const baseUrl = "http://127.0.0.1:" + server.address().port
 
@@ -49,7 +49,7 @@ test("Web管理端与文章媒体上传闭环", async function(t) {
   await t.test("Web入口和静态资源由同一服务提供", async function() {
     let result = await request("/")
     assert.equal(result.response.status, 200)
-    assert.match(result.body, /校园心理健康平台/)
+    assert.match(result.body, /学生心理关怀档案/)
     result = await request("/web/app.js")
     assert.equal(result.response.status, 200)
     assert.match(result.response.headers.get("content-type"), /javascript/)

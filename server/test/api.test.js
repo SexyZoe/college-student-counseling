@@ -23,7 +23,7 @@ let baseUrl
 test.before(async function() {
   database = openDatabase(":memory:")
   await seedDemoData(database)
-  const services = createServices(database, config)
+  const services = createServices(database, { ...config, staffOnly:false }, { now:() => Date.parse("2026-09-01T04:00:00Z") })
   server = http.createServer(createHttpApp(services, config))
   await new Promise(function(resolve) { server.listen(0, "127.0.0.1", resolve) })
   baseUrl = "http://127.0.0.1:" + server.address().port

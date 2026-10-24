@@ -13,5 +13,7 @@
 
 !server/web/
 !server/web/**
+!server/templates/
+!server/templates/**
 !shared/
 !shared/**
