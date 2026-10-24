@@ -36,6 +36,21 @@ LABEL org.opencontainers.image.title="数智心港湾后端" \
 
 WORKDIR /app/server
 
+ARG ALPINE_MIRROR=""
+# School networks can select a reachable Alpine mirror at build time.
+# Install document tools before application copies so code releases reuse this layer.
+RUN if [ -n "$ALPINE_MIRROR" ]; then \
+      sed -i "s|https://dl-cdn.alpinelinux.org/alpine|$ALPINE_MIRROR|g" /etc/apk/repositories; \
+    fi \
+    && apk add --no-cache libreoffice-writer font-noto-cjk font-dejavu \
+    && mkdir -p /app/data /app/data/uploads /app/backups \
+    && chown -R node:node /app \
+    && rm -rf /usr/local/lib/node_modules/npm \
+              /usr/local/lib/node_modules/corepack \
+              /usr/local/bin/npm \
+              /usr/local/bin/npx \
+              /usr/local/bin/corepack
+
 COPY --from=dependencies --chown=node:node /app/server/node_modules ./node_modules
 COPY --chown=node:node server/src ./src
 COPY --chown=node:node server/scripts ./scripts
@@ -45,15 +60,6 @@ COPY --chown=node:node server/templates ./templates
 COPY --chown=node:node shared /app/shared
 
 COPY --chown=node:node utils/scoring-engine.js /app/utils/scoring-engine.js
-
-RUN apk add --no-cache libreoffice-writer font-noto-cjk font-dejavu \
-    && mkdir -p /app/data /app/data/uploads /app/backups \
-    && chown -R node:node /app \
-    && rm -rf /usr/local/lib/node_modules/npm \
-              /usr/local/lib/node_modules/corepack \
-              /usr/local/bin/npm \
-              /usr/local/bin/npx \
-              /usr/local/bin/corepack
 
 ENV NODE_ENV=production
 ENV UV_THREADPOOL_SIZE=8
