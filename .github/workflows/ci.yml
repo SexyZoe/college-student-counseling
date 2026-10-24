@@ -33,8 +33,12 @@ jobs:
       - name: Audit backend tooling dependencies
         run: npm --prefix server audit --audit-level=high
 
-      - name: Install document conversion dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libreoffice-writer fonts-noto-cjk fonts-dejavu-core
+      - name: Build backend and use its document converter
+        run: |
+          docker build -f server/Dockerfile -t shuzhi-backend:ci .
+          mkdir -p "$RUNNER_TEMP/staff-document-bin"
+          ln -s "$GITHUB_WORKSPACE/scripts/ci-soffice.sh" "$RUNNER_TEMP/staff-document-bin/soffice"
+          echo "$RUNNER_TEMP/staff-document-bin" >> "$GITHUB_PATH"
 
       - name: Run all automated tests
         run: npm test
@@ -59,9 +63,6 @@ jobs:
 
       - name: Validate OpenAPI document
         run: ruby -e 'require "yaml"; d=YAML.load_file("server/openapi.yaml"); abort("invalid OpenAPI") unless d["openapi"] == "3.1.0" && d["paths"].is_a?(Hash)'
-
-      - name: Build backend image
-        run: docker build -f server/Dockerfile -t shuzhi-backend:ci .
 
       - name: Start container
         run: |
@@ -194,6 +195,13 @@ jobs:
 
       - name: Install migration dependencies
         run: npm --prefix server ci --ignore-scripts
+
+      - name: Build backend and use its document converter
+        run: |
+          docker build -f server/Dockerfile -t shuzhi-backend:ci .
+          mkdir -p "$RUNNER_TEMP/staff-document-bin"
+          ln -s "$GITHUB_WORKSPACE/scripts/ci-soffice.sh" "$RUNNER_TEMP/staff-document-bin/soffice"
+          echo "$RUNNER_TEMP/staff-document-bin" >> "$GITHUB_PATH"
 
       - name: Apply and verify MySQL migrations
         env:
