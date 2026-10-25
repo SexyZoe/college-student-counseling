@@ -1,6 +1,8 @@
 # 数智心港湾后端
 
-本目录提供测评数据闭环的第一阶段后端：登录鉴权、固定版本任务、测评结果持久化、服务器复算、风险事件、辅导员授权班级查询、学期切换和审计记录。
+当前后端以管理员、辅导员两种角色运行，提供学生登记档案、月度等级、Excel 导入导出，以及学生谈话记录的保存、修改和原表 Word/PDF 生成接口。详见 [学生登记功能说明](../docs/学生登记功能说明.md) 和 [OpenAPI](openapi.yaml)。
+
+当前部署冒烟检查使用管理员、辅导员两个角色。`npm run contract:test` 使用虚构资料验证档案、Excel 和谈话表流程，仅限隔离验收库，并要求显式设置 `CONTRACT_TEST_ALLOW_WRITES=true`。旧测评契约脚本作为历史资料保留，不在发布流程执行。已有历史数据保留，新档案与谈话模块使用008、009迁移新增的独立表。
 
 ## 本地启动
 
@@ -132,22 +134,13 @@ BASE_URL=http://127.0.0.1:8787 LOAD_PROFILE=health TOTAL_REQUESTS=2000 CONCURREN
 - 密钥不得写入镜像、Compose文件、Git仓库或日志；
 - 对外流量应由学校网关、WAF或反向代理提供HTTPS，应用容器无需直接保存证书。
 
-## 让微信开发者工具连接后端
+## 浏览器连接后端
 
-当前前端默认连接校园实例 `http://172.18.132.12`，详见[校园云部署说明](../deploy/README.md)。要切换为本机后端，先启动服务，然后在开发者工具调试控制台执行：
+启动后直接打开 `/web/`，网页和API同源，无需配置微信合法域名。网页登录传 `client: "web"`，由服务器设置 HttpOnly、SameSite=Strict 会话 Cookie；生产环境额外启用 Secure 并要求 HTTPS。Cookie写请求需 `X-Requested-With: campus-web` 及同源来源。
 
-```javascript
-wx.setStorageSync("backendApiBaseUrl", "http://127.0.0.1:8787")
-wx.setStorageSync("backendSyncEnabled", true)
-```
+学生网页通过 `/api/v1/student/catalog` 获取固定题库，通过 `/api/v1/student/submissions` 提交答案和同意版本，由服务器生成评分与快照。原 Bearer API保留供后端脚本及兼容使用，不作为网页令牌存储方式。
 
-重新登录小程序后会获得后端令牌，之前离线提交的结果会自动重试。关闭后端同步：
-
-```javascript
-wx.setStorageSync("backendSyncEnabled", false)
-```
-
-本地开发时还需在微信开发者工具中启用“不校验合法域名、web-view（业务域名）、TLS 版本以及 HTTPS 证书”。真机不能使用手机自身的 `127.0.0.1` 访问电脑，请改用电脑局域网地址；正式环境必须使用已配置为小程序合法域名的 HTTPS 地址。
+详见 [校园Web上线手册](../docs/校园Web上线手册.md)。
 
 ## 主要接口
 

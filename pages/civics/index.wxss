@@ -1,7 +1,0 @@
-.civics-page { min-height:100vh; padding-bottom:40rpx; background:#faf7f2; }
-.civics-banner { padding:50rpx 34rpx; background:linear-gradient(135deg,#b8a9d4,#8fc1e0); display:flex; flex-direction:column; }
-.banner-title { color:#fff; font-size:38rpx; font-weight:700; }.banner-sub { color:rgba(255,255,255,.85); font-size:25rpx; margin-top:10rpx; }
-.principle-box { margin:22rpx 30rpx 10rpx; padding:20rpx 24rpx; background:#f2eef8; color:#776b8c; border-radius:16rpx; font-size:23rpx; line-height:1.7; }
-.category-scroll { white-space:nowrap; }.category-row { display:flex; padding:20rpx 30rpx; gap:14rpx; }.category-item { padding:10rpx 24rpx; border-radius:28rpx; color:#777; background:#fff; font-size:24rpx; }.category-item.active { color:#fff; background:#9f8ec0; }
-.article-card { margin:0 30rpx 22rpx; padding:30rpx; background:#fff; border-radius:22rpx; box-shadow:0 3rpx 14rpx rgba(0,0,0,.04); }
-.article-tag { display:inline-block; padding:4rpx 12rpx; color:#79679a; background:#f2eef8; border-radius:8rpx; font-size:21rpx; }.article-title { display:block; margin:14rpx 0 8rpx; color:#333; font-size:31rpx; font-weight:700; }.article-summary { display:block; color:#777; font-size:25rpx; line-height:1.7; }.article-meta { display:flex; justify-content:space-between; margin-top:20rpx; color:#aaa; font-size:22rpx; }

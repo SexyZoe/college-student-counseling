@@ -1,9 +1,0 @@
-.faq-detail { min-height: 100vh; background: #faf7f2; }
-.detail-header { padding: 40rpx 30rpx; background: #fff; margin-bottom: 20rpx; }
-.detail-cat { font-size: 22rpx; color: #8fc8b5; margin-bottom: 12rpx; }
-.detail-question { font-size: 34rpx; font-weight: bold; color: #333; line-height: 1.5; }
-.detail-body { margin: 20rpx 30rpx; padding: 30rpx; background: #fff; border-radius: 16rpx; }
-.detail-answer { font-size: 28rpx; color: #555; line-height: 1.9; }
-.detail-tags { padding: 0 30rpx; display: flex; flex-wrap: wrap; gap: 12rpx; }
-.tag-item { font-size: 22rpx; color: #999; }
-.detail-disclaimer { margin: 30rpx; padding: 20rpx; text-align: center; font-size: 22rpx; color: #ccc; }

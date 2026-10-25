@@ -32,6 +32,7 @@ function createHttpApp(services, config, options) {
     if (request.method === "OPTIONS") return send(response, 204, null)
 
     try {
+      enforceBrowserOrigin(request)
       enforceRateLimit(limiter, response, "general:" + clientIp, config.generalRateLimitPerMinute || 300)
       const url = requestUrl
       const path = url.pathname.replace(/\/$/, "") || "/"
@@ -41,7 +42,8 @@ function createHttpApp(services, config, options) {
       }
       const mediaMatch = path.match(/^\/media\/([^/]+)$/)
       if (request.method === "GET" && mediaMatch) {
-        const asset = await services.getPublishedMedia(mediaMatch[1])
+        const mediaUser = await services.authenticate(readBearerToken(request))
+        const asset = await services.getPublishedMedia(mediaMatch[1], mediaUser)
         if (!asset) throw new HttpError(404, "MEDIA_NOT_FOUND", "媒体文件不存在或尚未发布")
         return streamMedia(request, response, asset)
       }
@@ -57,12 +59,27 @@ function createHttpApp(services, config, options) {
       }
       if (request.method === "POST" && path === "/api/v1/auth/login") {
         enforceRateLimit(limiter, response, "login:" + clientIp, config.loginRateLimitPerMinute || 30)
-        return sendOk(response, await services.login(await readJson(request, config.maxBodyBytes)))
+        const input = await readJson(request, config.maxBodyBytes)
+        if (input.client === "web" && request.headers["x-requested-with"] !== "campus-web") throw new HttpError(403, "CSRF_DENIED", "请通过校园网页登录")
+        if (input.client === "web" && config.nodeEnv === "production" && !request.socket.encrypted && !(config.trustProxy && request.headers["x-forwarded-proto"] === "https")) {
+          throw new HttpError(400, "HTTPS_REQUIRED", "请使用学校提供的 HTTPS 网址登录")
+        }
+        const result = await services.login(input)
+        if (input.client === "web") {
+          setSessionCookie(response, result.token, config)
+          return sendOk(response, { user:result.user, expiresIn:result.expiresIn })
+        }
+        return sendOk(response, result)
       }
       if (request.method === "POST" && path === "/api/v1/auth/logout") {
-        return sendOk(response, await services.logout(readBearerToken(request)))
+        const result = await services.logout(readBearerToken(request))
+        setSessionCookie(response, "", config)
+        return sendOk(response, result)
       }
 
+      if (request.method === "GET" && path === "/api/v1/site") {
+        return sendOk(response, { schoolName:config.schoolName || "校园", supportPhone:config.supportPhone || "", supportLocation:config.supportLocation || "", supportHours:config.supportHours || "", privacyContact:config.privacyContact || "", retentionNotice:config.retentionNotice || "由学校在正式运行前明确告知", production:config.nodeEnv === "production" })
+      }
       const user = await services.authenticate(readBearerToken(request))
       if (request.method === "GET" && path === "/api/v1/account") {
         return sendOk(response, await services.getAccount(user))
@@ -77,8 +94,130 @@ function createHttpApp(services, config, options) {
       if (user.must_change_password) {
         throw new HttpError(403, "PASSWORD_CHANGE_REQUIRED", "请先修改临时密码")
       }
+      if (path === "/api/v1/counselor/profile" && ["GET", "PATCH"].includes(request.method)) {
+        return sendOk(response, await services.counselorProfile(user, request.method === "PATCH" ? await readJson(request, config.maxBodyBytes) : undefined))
+      }
+      const registryFilters = Object.fromEntries(url.searchParams)
+      if(request.method==='GET'&&path==='/api/v1/holiday-periods')return sendOk(response,await services.listHolidayPeriods(user))
+      if(request.method==='POST'&&path==='/api/v1/holiday-periods')return sendOk(response,await services.saveHolidayPeriod(user,await readJson(request,config.maxBodyBytes)),201)
+      const holidayPeriod=path.match(/^\/api\/v1\/holiday-periods\/([^/]+)$/)
+      if(request.method==='PATCH'&&holidayPeriod)return sendOk(response,await services.saveHolidayPeriod(user,await readJson(request,config.maxBodyBytes),holidayPeriod[1]))
+      if(request.method==='GET'&&path==='/api/v1/holiday-departures')return sendOk(response,await services.listHolidayDepartures(user,registryFilters))
+      if(request.method==='POST'&&path==='/api/v1/holiday-departures/batch')return sendOk(response,await services.batchHolidayDepartures(user,await readJson(request,config.maxBodyBytes)))
+      if(request.method==='POST'&&path==='/api/v1/holiday-departures/evidence'){
+        enforceRateLimit(limiter,response,'holiday-image:'+user.id,20)
+        return sendOk(response,await services.uploadHolidayEvidence(user,await readBinary(request,2*1024*1024),request.headers['content-type']),201)
+      }
+      const holidayImage=path.match(/^\/api\/v1\/holiday-departures\/evidence\/([^/]+)$/)
+      if(request.method==='GET'&&holidayImage){const result=await services.getHolidayEvidence(user,holidayImage[1]);response.setHeader('Content-Type',result.mimeType);response.setHeader('Content-Disposition','inline; filename=parent-confirmation.'+(result.mimeType==='image/png'?'png':'jpg'));return response.end(Buffer.from(result.base64,'base64'))}
+      if(request.method==='POST'&&path==='/api/v1/holiday-departures/export'){
+        const result=await services.exportHolidayWorkbook(user,await readJson(request,config.maxBodyBytes));response.setHeader('Content-Type',result.mimeType);response.setHeader('Content-Disposition',"attachment; filename=holiday-departures.xlsx; filename*=UTF-8''"+encodeURIComponent(result.fileName));return response.end(result.buffer)
+      }
+      const holidayHistory=path.match(/^\/api\/v1\/holiday-departures\/([^/]+)\/versions$/)
+      if(request.method==='GET'&&holidayHistory)return sendOk(response,await services.getHolidayDepartureVersions(user,holidayHistory[1],registryFilters))
+      const holidayRecord=path.match(/^\/api\/v1\/holiday-departures\/([^/]+)$/)
+      if(request.method==='GET'&&holidayRecord)return sendOk(response,await services.getHolidayDeparture(user,holidayRecord[1],registryFilters))
+      if(request.method==='PUT'&&holidayRecord)return sendOk(response,await services.saveHolidayDeparture(user,holidayRecord[1],await readJson(request,config.maxBodyBytes)))
+      if(request.method==='GET'&&path==='/api/v1/grade-applications')return sendOk(response,await services.listGradeApplications(user,registryFilters))
+      if(request.method==='POST'&&path==='/api/v1/grade-applications')return sendOk(response,await services.saveGradeApplication(user,await readJson(request,config.maxBodyBytes)),201)
+      const gradeAction=path.match(/^\/api\/v1\/grade-applications\/([^/]+)\/(versions|document)$/)
+      if(gradeAction){
+        if(request.method==='GET'&&gradeAction[2]==='versions')return sendOk(response,await services.getGradeApplicationVersions(user,gradeAction[1]))
+        if(request.method==='GET'&&gradeAction[2]==='document'){
+          enforceRateLimit(limiter,response,'grade-document:'+user.id,15)
+          const result=await services.exportGradeApplication(user,gradeAction[1],registryFilters)
+          if(registryFilters.format==='preview')return sendOk(response,{pages:result.pages,pdfBase64:result.pdfBase64})
+          response.setHeader('Content-Type',result.mimeType)
+          response.setHeader('Content-Disposition',(registryFilters.preview==='1'?'inline':'attachment')+"; filename=grade-application."+(registryFilters.format||'pdf')+"; filename*=UTF-8''"+encodeURIComponent(result.fileName))
+          response.setHeader('X-Frame-Options','SAMEORIGIN')
+          response.setHeader('Content-Security-Policy',"default-src 'none'; frame-ancestors 'self'")
+          return response.end(result.buffer)
+        }
+      }
+      const gradeRecord=path.match(/^\/api\/v1\/grade-applications\/([^/]+)$/)
+      if(gradeRecord&&request.method==='GET')return sendOk(response,await services.getGradeApplication(user,gradeRecord[1]))
+      if(gradeRecord&&request.method==='PATCH')return sendOk(response,await services.saveGradeApplication(user,await readJson(request,config.maxBodyBytes),gradeRecord[1]))
+      if(request.method==='GET'&&path==='/api/v1/committee/classes')return sendOk(response,await services.listCommitteeClasses(user,registryFilters))
+      if(request.method==='POST'&&path==='/api/v1/committee/classes')return sendOk(response,await services.saveCommitteeClass(user,await readJson(request,config.maxBodyBytes)),201)
+      const committeeClass=path.match(/^\/api\/v1\/committee\/classes\/([^/]+)$/)
+      if(request.method==='GET'&&committeeClass)return sendOk(response,await services.getCommitteeClass(user,committeeClass[1]))
+      if(request.method==='PATCH'&&committeeClass)return sendOk(response,await services.saveCommitteeClass(user,await readJson(request,config.maxBodyBytes),committeeClass[1]))
+      const committeeCopy=path.match(/^\/api\/v1\/committee\/classes\/([^/]+)\/copy$/)
+      if(request.method==='POST'&&committeeCopy)return sendOk(response,await services.copyCommitteeClass(user,committeeCopy[1],await readJson(request,config.maxBodyBytes)),201)
+      const committeeMembers=path.match(/^\/api\/v1\/committee\/classes\/([^/]+)\/members(?:\/([^/]+))?$/)
+      if(committeeMembers&&((request.method==='POST'&&!committeeMembers[2])||(request.method==='PATCH'&&committeeMembers[2])))return sendOk(response,await services.saveCommitteeMember(user,committeeMembers[1],await readJson(request,config.maxBodyBytes),committeeMembers[2]),committeeMembers[2]?200:201)
+      if(request.method==='PATCH'&&path==='/api/v1/committee/college-headers')return sendOk(response,await services.saveCommitteeHeaders(user,await readJson(request,config.maxBodyBytes)))
+      if(request.method==='POST'&&path==='/api/v1/committee/export/options')return sendOk(response,await services.getCommitteeExportOptions(user,await readJson(request,config.maxBodyBytes)))
+      if(request.method==='POST'&&path==='/api/v1/committee/export/preview'){
+        enforceRateLimit(limiter,response,'committee-preview:'+user.id,12)
+        return sendOk(response,await services.previewCommitteeExport(user,await readJson(request,config.maxBodyBytes)))
+      }
+      if(request.method==='POST'&&path==='/api/v1/committee/export'){
+        const result=await services.exportCommitteeWorkbook(user,await readJson(request,config.maxBodyBytes))
+        response.setHeader('Content-Type',result.mimeType)
+        response.setHeader('Content-Disposition',"attachment; filename=committee-export."+(result.mimeType==='application/zip'?'zip':'xlsx')+"; filename*=UTF-8''"+encodeURIComponent(result.fileName))
+        return response.end(result.buffer)
+      }
+      if(request.method === "GET" && path === "/api/v1/weekly-ledgers/options")return sendOk(response,await services.getWeeklyOptions(user))
+      if(request.method === "GET" && path === "/api/v1/weekly-ledgers")return sendOk(response,await services.listWeeklyLedgers(user,registryFilters))
+      const weeklyCalendar=path.match(/^\/api\/v1\/weekly-ledgers\/calendars\/([^/]+)$/)
+      if(request.method === "PATCH" && weeklyCalendar)return sendOk(response,await services.saveWeeklyCalendar(user,weeklyCalendar[1],await readJson(request,config.maxBodyBytes)))
+      const weeklyVersions=path.match(/^\/api\/v1\/weekly-ledgers\/records\/([^/]+)\/versions$/)
+      if(request.method === "GET" && weeklyVersions)return sendOk(response,await services.getWeeklyVersions(user,weeklyVersions[1]))
+      const weeklyHistory=path.match(/^\/api\/v1\/weekly-ledgers\/students\/([^/]+)\/history$/)
+      if(request.method === "GET" && weeklyHistory)return sendOk(response,await services.getWeeklyHistory(user,weeklyHistory[1]))
+      const weeklyStudent=path.match(/^\/api\/v1\/weekly-ledgers\/students\/([^/]+)$/)
+      if(request.method === "GET" && weeklyStudent)return sendOk(response,await services.getWeeklyStudent(user,weeklyStudent[1],registryFilters))
+      if(request.method === "POST" && weeklyStudent)return sendOk(response,await services.saveWeeklyRecord(user,weeklyStudent[1],await readJson(request,config.maxBodyBytes)))
+      if(request.method === "POST" && path === "/api/v1/weekly-ledgers/print")return sendOk(response,await services.printWeeklyLedgers(user,await readJson(request,config.maxBodyBytes)))
+      if(request.method === "POST" && path === "/api/v1/weekly-ledgers/export"){
+        const buffer=await services.exportWeeklyWorkbook(user,await readJson(request,config.maxBodyBytes))
+        response.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response.setHeader("Content-Disposition","attachment; filename=weekly-ledger.xlsx; filename*=UTF-8''"+encodeURIComponent("严重心理问题学生周台账表.xlsx"))
+        return response.end(buffer)
+      }
+      if (request.method === "GET" && path === "/api/v1/talk-records/options") return sendOk(response, await services.getTalkMetadata(user))
+      if (request.method === "GET" && path === "/api/v1/talk-records") return sendOk(response, await services.listTalkRecords(user, registryFilters))
+      if (request.method === "POST" && path === "/api/v1/talk-records") return sendOk(response, await services.saveTalkRecord(user, await readJson(request, config.maxBodyBytes)), 201)
+      const talkDocument = path.match(/^\/api\/v1\/talk-records\/([^/]+)\/document$/)
+      if (request.method === "GET" && talkDocument) {
+        enforceRateLimit(limiter, response, "talk-document:" + user.id, 15)
+        const result = await services.exportTalkDocument(user, talkDocument[1], registryFilters)
+        response.setHeader("Content-Type", result.mimeType)
+        response.setHeader("Content-Disposition", (registryFilters.preview === "1" ? "inline" : "attachment") + "; filename=talk-form." + (registryFilters.format || "pdf") + "; filename*=UTF-8''" + encodeURIComponent(result.fileName))
+        response.setHeader("X-Frame-Options", "SAMEORIGIN")
+        response.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'self'")
+        return response.end(result.buffer)
+      }
+      const talkRecord = path.match(/^\/api\/v1\/talk-records\/([^/]+)$/)
+      if (talkRecord && request.method === "GET") return sendOk(response, await services.getTalkRecord(user, talkRecord[1]))
+      if (talkRecord && request.method === "PATCH") return sendOk(response, await services.saveTalkRecord(user, await readJson(request, config.maxBodyBytes), talkRecord[1]))
+      if (request.method === "GET" && path === "/api/v1/registry/students") return sendOk(response, await services.listRegistryStudents(user, registryFilters))
+      if (request.method === "POST" && path === "/api/v1/registry/students") return sendOk(response, await services.saveRegistryStudent(user, await readJson(request, config.maxBodyBytes)), 201)
+      if ((request.method === "GET" || (request.method === "POST" && path.endsWith("/export"))) && ["/api/v1/registry/export", "/api/v1/registry/template"].includes(path)) {
+        const buffer = await services.exportRegistryWorkbook(user, request.method === "POST" ? await readJson(request, config.maxBodyBytes) : registryFilters, path.endsWith("/template"))
+        response.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response.setHeader("Content-Disposition", "attachment; filename=student-registry.xlsx; filename*=UTF-8''" + encodeURIComponent(path.endsWith("/template") ? "学生登记模板.xlsx" : "心理问题学生注册表.xlsx"))
+        return response.end(buffer)
+      }
+      if (["GET", "POST"].includes(request.method) && path === "/api/v1/registry/print") return sendOk(response, await services.printRegistryStudents(user, request.method === "POST" ? await readJson(request, config.maxBodyBytes) : registryFilters))
+      if (request.method === "POST" && path === "/api/v1/registry/import/preview") {
+        if (!["admin", "counselor"].includes(user.role)) throw new HttpError(403, "FORBIDDEN", "当前账号无权导入")
+        return sendOk(response, await services.previewRegistryImport(user, await readBinary(request, 5 * 1024 * 1024), registryFilters), 201)
+      }
+      const registryConfirm = path.match(/^\/api\/v1\/registry\/import\/([^/]+)\/confirm$/)
+      if (request.method === "POST" && registryConfirm) return sendOk(response, await services.confirmRegistryImport(user, registryConfirm[1], await readJson(request, config.maxBodyBytes)))
+      const registryStudent = path.match(/^\/api\/v1\/registry\/students\/([^/]+)$/)
+      if (registryStudent && request.method === "GET") return sendOk(response, await services.getRegistryStudent(user, registryStudent[1]))
+      if (registryStudent && request.method === "PATCH") return sendOk(response, await services.saveRegistryStudent(user, await readJson(request, config.maxBodyBytes), registryStudent[1]))
       if (user.role === "student" && !user.profile_completed) {
         throw new HttpError(403, "ACCOUNT_SETUP_REQUIRED", "请先填写姓名并修改初始密码")
+      }
+      if (request.method === "GET" && path === "/api/v1/student/catalog") {
+        return sendOk(response, await services.getStudentCatalog(user))
+      }
+      if (request.method === "POST" && path === "/api/v1/student/submissions") {
+        return sendOk(response, await services.submitWebAssessment(user, await readJson(request, config.maxBodyBytes)), 201)
       }
       const resetMatch = path.match(/^\/api\/v1\/admin\/students\/([^/]+)\/reset-password$/)
       if (request.method === "POST" && resetMatch) {
@@ -140,6 +279,10 @@ function createHttpApp(services, config, options) {
       const currentSemesterMatch = path.match(/^\/api\/v1\/admin\/semesters\/([^/]+)\/current$/)
       if (request.method === "PATCH" && currentSemesterMatch) {
         return sendOk(response, await services.setCurrentSemester(user, decodeURIComponent(currentSemesterMatch[1])))
+      }
+      const semesterMatch = path.match(/^\/api\/v1\/admin\/semesters\/([^/]+)$/)
+      if (request.method === 'PATCH' && semesterMatch) {
+        return sendOk(response, await services.updateSemester(user, decodeURIComponent(semesterMatch[1]), await readJson(request, config.maxBodyBytes)))
       }
       if (request.method === "POST" && path === "/api/v1/admin/counselor-assignments") {
         return sendOk(response, await services.createCounselorAssignment(user, await readJson(request, config.maxBodyBytes)), 201)
@@ -245,6 +388,14 @@ function routeLabel(pathname) {
   return String(pathname || "/")
     .replace(/\/$/, "")
     .replace(/\/media\/[^/]+/g, "/media/:id")
+    .replace(/\/registry\/import\/(?!preview(?:\/|$))[^/]+/g, "/registry/import/:id")
+    .replace(/\/talk-records\/(?!options(?:\/|$))[^/]+/g, "/talk-records/:id")
+    .replace(/\/weekly-ledgers\/(students|records|calendars)\/[^/]+/g,"/weekly-ledgers/$1/:id")
+    .replace(/\/committee\/classes\/[^/]+(?:\/members\/[^/]+)?/g,'/committee/classes/:id')
+    .replace(/\/grade-applications\/[^/]+/g,'/grade-applications/:id')
+    .replace(/\/holiday-periods\/[^/]+/g,'/holiday-periods/:id')
+    .replace(/\/holiday-departures\/evidence\/[^/]+/g,'/holiday-departures/evidence/:id')
+    .replace(/\/holiday-departures\/(?!batch$|export$|evidence$)[^/]+/g,'/holiday-departures/:id')
     .replace(/\/(classes|risk-events|students|counselors|semesters|import-batches)\/[^/]+/g, "/$1/:id") || "/"
 }
 
@@ -273,11 +424,32 @@ function sendMetrics(response, body) {
   response.end(body)
 }
 
+function setSessionCookie(response, token, config) {
+  response.setHeader("Set-Cookie", "campus_session=" + token + "; Path=/; HttpOnly; SameSite=Strict; Max-Age=" + (token ? config.tokenTtlSeconds : 0) + (config.nodeEnv === "production" ? "; Secure" : ""))
+}
+
+function enforceBrowserOrigin(request) {
+  if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return
+  const usesCookie = /(?:^|;\s*)campus_session=/.test(String(request.headers.cookie || ""))
+  if ((!usesCookie && request.headers["x-requested-with"] !== "campus-web") || request.headers.authorization) return
+  if (request.headers["x-requested-with"] !== "campus-web" || request.headers["sec-fetch-site"] === "cross-site") {
+    throw new HttpError(403, "CSRF_DENIED", "请求来源不正确，请重新打开校园网页")
+  }
+  const origin = request.headers.origin
+  if (origin) {
+    let host
+    try { host = new URL(origin).host } catch (_) { throw new HttpError(403, "CSRF_DENIED", "请求来源不正确") }
+    if (host !== request.headers.host) throw new HttpError(403, "CSRF_DENIED", "请求来源不正确")
+  }
+}
+
 function readBearerToken(request) {
   const authorization = String(request.headers.authorization || "")
   const match = authorization.match(/^Bearer\s+(.+)$/i)
-  if (!match) throw new HttpError(401, "AUTH_REQUIRED", "请先登录")
-  return match[1]
+  if (match) return match[1]
+  const cookie = String(request.headers.cookie || "").split(";").map(x => x.trim()).find(x => x.startsWith("campus_session="))
+  if (cookie && cookie.slice(15)) return cookie.slice(15)
+  throw new HttpError(401, "AUTH_REQUIRED", "请先登录")
 }
 
 function readJson(request, maxBytes) {
@@ -338,18 +510,30 @@ async function serveWebAsset(response, requestPath, configuredRoot) {
     "/web/":"index.html",
     "/web/index.html":"index.html",
     "/web/app.js":"app.js",
-    "/web/styles.css":"styles.css"
+    "/web/registry.js":"registry.js",
+    "/web/registry.css":"registry.css",
+    "/web/talks.js":"talks.js",
+    "/web/weekly.js":"weekly.js",
+    "/web/committee.js":"committee.js",
+    "/web/applications.js":"applications.js",
+    "/web/holidays.js":"holidays.js",
+    "/web/styles.css":"styles.css",
+    "/web/student.js":"student.js",
+    "/web/personality.js":"personality.js",
+    "/web/campus.css":"campus.css",
+    "/web/miniprogram.css":"miniprogram.css"
   }
-  const name = files[requestPath]
+  const legacyImage = requestPath.match(/^\/web\/images\/(logo(?:_small)?\.png|banners\/banner_[123]\.png|avatars\/avatar_[123]\.png|articles\/article_(?:growth|mood|anxiety|social|stress|love)\.png)$/)
+  const name = files[requestPath] || (legacyImage ? "images/" + legacyImage[1] : null)
   if (!name) throw new HttpError(404, "NOT_FOUND", "页面不存在")
   const root = configuredRoot || pathModule.join(__dirname, "..", "web")
   let body
   try { body = await fs.promises.readFile(pathModule.join(root, name)) }
   catch (error) { throw new HttpError(404, "NOT_FOUND", "Web 管理端资源不存在") }
   response.statusCode = 200
-  response.setHeader("Content-Type", name.endsWith(".html") ? "text/html; charset=utf-8" : (name.endsWith(".js") ? "text/javascript; charset=utf-8" : "text/css; charset=utf-8"))
-  response.setHeader("Cache-Control", name === "index.html" ? "no-cache" : "public, max-age=3600")
-  response.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+  response.setHeader("Content-Type", name.endsWith(".html") ? "text/html; charset=utf-8" : (name.endsWith(".js") ? "text/javascript; charset=utf-8" : (name.endsWith(".png") ? "image/png" : "text/css; charset=utf-8")))
+  response.setHeader("Cache-Control", "no-cache")
+  response.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; frame-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
   response.end(body)
 }
 
@@ -361,7 +545,7 @@ async function streamMedia(request, response, asset) {
   const range = String(request.headers.range || "")
   response.setHeader("Content-Type", asset.mimeType)
   response.setHeader("Accept-Ranges", "bytes")
-  response.setHeader("Cache-Control", "public, max-age=86400, immutable")
+  response.setHeader("Cache-Control", "private, no-store")
   response.setHeader("Content-Security-Policy", "default-src 'none'")
   if (range) {
     const match = range.match(/^bytes=(\d*)-(\d*)$/)

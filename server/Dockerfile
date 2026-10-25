@@ -29,21 +29,32 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
 USER node
 CMD ["node", "scripts/mysql-migrate.js"]
 
+FROM scratch AS document-packages
+# An optional named build context can supply signed APKs on slow campus networks.
+COPY .dockerignore /no-cached-packages
+
 FROM ${NODE_IMAGE} AS runtime
 
 LABEL org.opencontainers.image.title="数智心港湾后端" \
-      org.opencontainers.image.description="大学生心理健康小程序后端服务"
+      org.opencontainers.image.description="校园内网心理健康网页应用"
 
 WORKDIR /app/server
 
-COPY --from=dependencies --chown=node:node /app/server/node_modules ./node_modules
-COPY --chown=node:node server/src ./src
-COPY --chown=node:node server/scripts ./scripts
-COPY --chown=node:node server/web ./web
-
-COPY --chown=node:node utils/scoring-engine.js /app/utils/scoring-engine.js
-
-RUN mkdir -p /app/data /app/data/uploads /app/backups \
+ARG ALPINE_MIRROR=""
+# School networks can select a reachable Alpine mirror at build time.
+# Install document tools before application copies so code releases reuse this layer.
+RUN --mount=type=bind,from=document-packages,target=/packages \
+    if [ -n "$ALPINE_MIRROR" ]; then \
+      sed -i "s|https://dl-cdn.alpinelinux.org/alpine|$ALPINE_MIRROR|g" /etc/apk/repositories; \
+    fi \
+    && if [ -f /packages/.ready ]; then \
+      apk add --no-network /packages/*.apk; \
+    else \
+      apk add --no-cache libreoffice-writer libreoffice-calc poppler-utils font-noto-cjk font-dejavu; \
+    fi \
+    && test -x /usr/bin/pdftoppm \
+    && apk info -e libreoffice-calc >/dev/null \
+    && mkdir -p /app/data /app/data/uploads /app/backups \
     && chown -R node:node /app \
     && rm -rf /usr/local/lib/node_modules/npm \
               /usr/local/lib/node_modules/corepack \
@@ -51,11 +62,22 @@ RUN mkdir -p /app/data /app/data/uploads /app/backups \
               /usr/local/bin/npx \
               /usr/local/bin/corepack
 
+COPY --from=dependencies --chown=node:node /app/server/node_modules ./node_modules
+COPY --chown=node:node server/src ./src
+COPY --chown=node:node server/scripts ./scripts
+COPY --chown=node:node server/web ./web
+COPY --chown=node:node server/templates ./templates
+
+COPY --chown=node:node shared /app/shared
+
+COPY --chown=node:node utils/scoring-engine.js /app/utils/scoring-engine.js
+
 ENV NODE_ENV=production
 ENV UV_THREADPOOL_SIZE=8
 ENV HOST=0.0.0.0
 ENV PORT=8787
 ENV DATABASE_PATH=/app/data/app.db
+ENV DOCUMENT_CONVERTER_PATH=/usr/bin/soffice
 
 EXPOSE 8787
 

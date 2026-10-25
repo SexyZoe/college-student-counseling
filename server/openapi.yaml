@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
   title: 数智心港湾后端 API
-  version: 0.4.0
+  version: 2.0.0
   description: |
-    大学生心理健康支持小程序的后端接口。测评结果仅用于教育支持和人工复核，
-    不构成医疗诊断。除健康检查外，业务接口使用 Bearer 令牌鉴权。
+    当前入口为管理员和辅导员使用的学生心理关怀档案管理系统。
+    Student 标签接口为旧版历史能力，正式启动已禁止学生登录。网页使用 HttpOnly Cookie（写请求需 X-Requested-With: campus-web），兼容脚本 Bearer 令牌鉴权。
 servers:
   - url: http://127.0.0.1:8787
     description: 本地开发
@@ -14,7 +14,48 @@ tags:
   - name: Student
   - name: Counselor
   - name: Admin
+  - name: Registry
+  - name: TalkRecords
 paths:
+  /api/v1/site:
+    get:
+      tags: [Operations]
+      summary: 获取学校名称、求助和隐私联系信息
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+  /api/v1/student/catalog:
+    get:
+      tags: [Student]
+      summary: 获取固定版本量表、FAQ及测评同意版本
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+  /api/v1/student/submissions:
+    post:
+      tags: [Student]
+      summary: 网页提交答案；服务端评分、快照、同意审计和幂等保存
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [submissionId, assessmentId, answers, questionnaireVersion, scoringVersion, consent, consentVersion]
+              properties:
+                submissionId: { type: string, minLength: 6, maxLength: 128 }
+                assessmentId: { type: integer, minimum: 1, maximum: 8 }
+                taskId: { type: string }
+                answers:
+                  type: object
+                  description: 零起始题号到零起始选项索引的映射
+                  additionalProperties: { type: integer, minimum: 0, maximum: 3 }
+                questionnaireVersion: { type: string }
+                scoringVersion: { type: string }
+                consent: { type: boolean, const: true }
+                consentVersion: { type: string }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /api/v1/account:
     get:
       tags: [Authentication]
@@ -471,7 +512,7 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [staffId, displayName]
+              required: [staffId]
               properties:
                 staffId: { type: string, minLength: 2, maxLength: 32 }
                 displayName: { type: string, minLength: 1, maxLength: 50 }
@@ -575,8 +616,220 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/counselor/profile:
+    get:
+      tags: [Counselor]
+      summary: 辅导员读取本人姓名、学院和联系方式
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    patch:
+      tags: [Counselor]
+      summary: 辅导员自行维护个人资料
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [displayName]
+              properties:
+                displayName: { type: string, minLength: 1, maxLength: 50 }
+                college: { type: string, maxLength: 100 }
+                contact: { type: string, maxLength: 100 }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+  /api/v1/registry/students:
+    get:
+      tags: [Registry]
+      summary: 查询授权范围内的学生档案，返回完整月度等级历史
+      parameters:
+        - { in: query, name: q, schema: { type: string } }
+        - { in: query, name: college, schema: { type: string } }
+        - { in: query, name: counselorId, schema: { type: string }, description: 管理员使用；辅导员始终限定本人 }
+        - { in: query, name: month, schema: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' } }
+        - { in: query, name: level, schema: { type: string }, description: 按所选月份等级筛选 }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    post:
+      tags: [Registry]
+      summary: 新增学生登记，管理员需指定负责辅导员
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegistryStudentInput" }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/registry/students/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Registry]
+      summary: 读取一条学生档案；无权访问时返回404
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    patch:
+      tags: [Registry]
+      summary: 编辑完整档案，需携带读取时的revision及完整levels；不改变负责归属
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegistryStudentInput" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/registry/template:
+    get:
+      tags: [Registry]
+      summary: 下载xlsx登记模板，原表12列后附可选学号列
+      parameters:
+        - { in: query, name: month, required: true, schema: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' } }
+      responses:
+        "200":
+          description: XLSX文件
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+  /api/v1/registry/export:
+    post:
+      tags: [Registry]
+      summary: 按查询或选中ID导出指定月份Excel，记录导出审计
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegistryExportFilters" }
+      responses:
+        "200":
+          description: XLSX文件
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+  /api/v1/registry/print:
+    post:
+      tags: [Registry]
+      summary: 获取打印所需的授权档案并记录审计；浏览器负责打印及保存PDF
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegistryExportFilters" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+  /api/v1/registry/import/preview:
+    post:
+      tags: [Registry]
+      summary: 预检xlsx，返回完整字段、原行号、错误与重名提示；不创建学生档案
+      parameters:
+        - { in: query, name: month, required: true, schema: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' } }
+        - { in: query, name: counselorId, schema: { type: string }, description: 管理员需指定已启用的辅导员 }
+      requestBody:
+        required: true
+        content:
+          application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+            schema: { type: string, format: binary, description: 最大5MB、2000条、100列 }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/registry/import/{id}/confirm:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Registry]
+      summary: 上传本人在15分钟内确认导入；重复确认返回相同结果
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                acknowledgeDuplicates: { type: boolean, description: 已核对重名提示并确认需要分别建档 }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { description: 预览已过期，请重新上传 }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/talk-records/options:
+    get:
+      tags: [TalkRecords]
+      summary: 返回原表困扰选项、签名方式及文档字体条件
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+  /api/v1/talk-records:
+    get:
+      tags: [TalkRecords]
+      summary: 本人记录列表或管理员全校查询，不返回谈话正文
+      parameters:
+        - { in: query, name: q, schema: { type: string } }
+        - { in: query, name: counselorId, schema: { type: string }, description: 管理员可指定辅导员 }
+        - { in: query, name: registryStudentId, schema: { type: string } }
+        - { in: query, name: from, schema: { type: string, format: date } }
+        - { in: query, name: to, schema: { type: string, format: date } }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    post:
+      tags: [TalkRecords]
+      summary: 辅导员独立保存一次谈话，允许未完成内容；管理员不可代写
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TalkRecordInput" }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/talk-records/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [TalkRecords]
+      summary: 获取完整谈话表及系统保存修改时间，无权时返回404
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    patch:
+      tags: [TalkRecords]
+      summary: 所属辅导员修改，必须携带revision；管理员只读
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TalkRecordInput" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/talk-records/{id}/document:
+    get:
+      tags: [TalkRecords]
+      summary: 生成学校原表Word/PDF，检查页数和边线，不截断文字或改变字号
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+        - { in: query, name: format, schema: { type: string, enum: [doc, docx, pdf], default: pdf } }
+        - { in: query, name: revision, schema: { type: integer, minimum: 1 } }
+        - { in: query, name: preview, schema: { type: string, enum: ['1'] }, description: inline预览，否则附件下载 }
+        - { in: query, name: purpose, schema: { type: string, enum: [print] }, description: 记录打印审计 }
+      responses:
+        "200":
+          description: 原表格式文件
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            application/msword:
+              schema: { type: string, format: binary }
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: { type: string, format: binary }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "503": { description: 文档转换器不可用或超时 }
 components:
   securitySchemes:
+    campusCookie:
+      type: apiKey
+      in: cookie
+      name: campus_session
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
     metricsBearer: { type: http, scheme: bearer }
   parameters:
@@ -601,6 +854,58 @@ components:
       required: true
       schema: { type: integer, minimum: 1 }
   schemas:
+    TalkRecordInput:
+      type: object
+      required: [name, issues]
+      properties:
+        clientRequestId: { type: string, minLength: 8, maxLength: 80, description: 新建必填，同请求重试不重复保存 }
+        revision: { type: integer, minimum: 1, description: 修改时必填 }
+        registryStudentId: { type: string, description: 可关联本人学生档案，修改不更换关联 }
+        name: { type: string, minLength: 1, maxLength: 50 }
+        gender: { type: string, maxLength: 10 }
+        college: { type: string, maxLength: 100 }
+        gradeClass: { type: string, maxLength: 200 }
+        studentNo: { type: string, maxLength: 50 }
+        talkDate: { type: string, description: YYYY-MM-DD或未完成时为空 }
+        issues:
+          type: array
+          items: { type: integer, minimum: 1, maximum: 9 }
+          description: 原表九类困扰，多选；预览和导出仅显示选中项，保留原编号
+        otherIssue: { type: string, maxLength: 200 }
+        content: { type: string, maxLength: 10000, description: 保存允许长记录，导出需符合原表容量 }
+    RegistryExportFilters:
+      type: object
+      required: [month]
+      properties:
+        month: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
+        q: { type: string }
+        college: { type: string }
+        counselorId: { type: string }
+        level: { type: string }
+        ids: { type: string, description: 逗号分隔的档案ID，最多2000条；仍需符合查询范围和权限 }
+    RegistryStudentInput:
+      type: object
+      required: [college, name, gradeMajor]
+      properties:
+        counselorId: { type: string, description: 管理员新增时必填；辅导员自动归属本人 }
+        revision: { type: integer, minimum: 1, description: 修改时必填，旧版本拒绝覆盖 }
+        acknowledgeDuplicate: { type: boolean }
+        college: { type: string, minLength: 1, maxLength: 100 }
+        name: { type: string, minLength: 1, maxLength: 50 }
+        gender: { type: string, maxLength: 10 }
+        gradeMajor: { type: string, minLength: 1, maxLength: 150 }
+        phone: { type: string, maxLength: 100 }
+        dorm: { type: string, maxLength: 100 }
+        studentNo: { type: string, maxLength: 50 }
+        counselorInfo: { type: string, maxLength: 200 }
+        studentSupport: { type: string, maxLength: 1000 }
+        leaderSupport: { type: string, maxLength: 1000 }
+        remarks: { type: string, maxLength: 3000 }
+        levels:
+          type: object
+          maxProperties: 240
+          description: YYYY-MM到等级文本的映射，修改时传完整历史
+          additionalProperties: { type: string, maxLength: 40 }
     SuccessEnvelope:
       type: object
       required: [ok, data]
@@ -624,12 +929,13 @@ components:
       type: object
       required: [role, accountId, password]
       properties:
-        role: { type: string, enum: [student, counselor, admin] }
+        client: { type: string, enum: [web], description: 网页登录只设置Cookie而不返回token }
+        role: { type: string, enum: [counselor, admin] }
         accountId: { type: string, maxLength: 160 }
         password: { type: string, format: password }
     LoginResult:
       type: object
-      required: [token, expiresIn, user]
+      required: [expiresIn, user]
       properties:
         token: { type: string, writeOnly: true }
         expiresIn: { type: integer }
@@ -637,7 +943,7 @@ components:
           type: object
           properties:
             id: { type: string }
-            role: { type: string, enum: [student, counselor, admin] }
+            role: { type: string, enum: [counselor, admin] }
             accountId: { type: string }
             displayName: { type: string }
             studentId: { type: string }
@@ -735,3 +1041,4 @@ components:
           schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 security:
   - bearerAuth: []
+  - campusCookie: []

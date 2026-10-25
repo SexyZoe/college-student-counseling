@@ -13,7 +13,7 @@ let baseUrl
 test.before(async function() {
   database = openDatabase(":memory:")
   await seedDemoData(database)
-  server = http.createServer(createHttpApp(createServices(database, config), config))
+  server = http.createServer(createHttpApp(createServices(database, { ...config, staffOnly:false }), config))
   await new Promise(function(resolve) { server.listen(0, "127.0.0.1", resolve) })
   baseUrl = "http://127.0.0.1:" + server.address().port
 })

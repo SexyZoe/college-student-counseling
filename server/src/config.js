@@ -63,7 +63,16 @@ function loadConfig(environment) {
     throw new Error("生产环境使用 MySQL 时必须设置 MYSQL_SSL_CA 并校验服务端证书")
   }
   return {
+    staffOnly:true,
+    documentConverterPath:String(env.DOCUMENT_CONVERTER_PATH || "").trim(),
+    documentFontsExact:booleanSetting(env, "DOCUMENT_FONTS_EXACT", false),
     nodeEnv: nodeEnv,
+    schoolName:String(env.SCHOOL_NAME || "校园").trim(),
+    supportPhone:String(env.SUPPORT_PHONE || "").trim(),
+    supportLocation:String(env.SUPPORT_LOCATION || "").trim(),
+    supportHours:String(env.SUPPORT_HOURS || "").trim(),
+    privacyContact:String(env.PRIVACY_CONTACT || "").trim(),
+    retentionNotice:String(env.RETENTION_NOTICE || "").trim(),
     host: env.HOST || "127.0.0.1",
     port: integerSetting(env, "PORT", 8787, 1, 65535),
     databasePath: env.DATABASE_PATH || path.join(__dirname, "..", "data", "app.db"),

@@ -1,6 +1,7 @@
 const crypto = require("node:crypto")
 const { HttpError } = require("./errors")
 const { inTransaction } = require("./database")
+const { semesterInput, validateFirstMonday, monday:semesterMonday } = require("./academic-calendar")
 const {
   normalizeAccountId,
   createPasswordRecordAsync,
@@ -15,7 +16,16 @@ const { createStudentAccountServices } = require("./student-account-service")
 const { createPersonnelImportServices } = require("./personnel-import-service")
 const { createMediaServices } = require("./media-service")
 const { createCounselorAdminServices } = require("./counselor-admin-service")
+const { createRegistryServices } = require("./registry-service")
+const { createTalkServices } = require("./talk-service")
+const { createWeeklyServices } = require("./weekly-service")
+const { createCommitteeServices } = require("./committee-service")
+const { createGradeApplicationServices } = require("./grade-application-service")
+const { createHolidayServices } = require("./holiday-service")
 const scoringEngine = require("../../utils/scoring-engine")
+const assessmentCatalog = require("../../shared/assessments.json")
+const faqCatalog = require("../../shared/faq.json")
+const CONSENT_VERSION = "campus-web-2026-09-v1"
 
 const ROLES = ["student", "counselor", "admin"]
 const RISK_LEVELS = ["正常", "关注", "较高风险", "紧急风险"]
@@ -103,6 +113,7 @@ function createServices(database, config, options) {
 
   async function login(credentials) {
     const role = credentials && credentials.role
+    if (config.staffOnly !== false && role === "student") throw new HttpError(403, "STAFF_ONLY", "本系统仅供管理员和辅导员使用")
     const accountId = normalizeAccountId(credentials && credentials.accountId)
     const password = String(credentials && credentials.password || "")
     if (ROLES.indexOf(role) === -1 || !accountId || !password) {
@@ -153,6 +164,7 @@ function createServices(database, config, options) {
     }
     const user = await database.prepare("SELECT * FROM users WHERE id = ? AND active = 1").get(payload.sub)
     if (!user || user.role !== payload.role || Number(user.auth_version || 0) !== Number(payload.ver || 0)) throw new HttpError(401, "INVALID_TOKEN", "登录身份已失效")
+    if (config.staffOnly !== false && user.role === "student") throw new HttpError(401, "INVALID_TOKEN", "学生登录入口已停用")
     return user
   }
 
@@ -270,7 +282,8 @@ function createServices(database, config, options) {
     const clientCreatedAt = String(payload.createdAt || nowIso())
     if (isNaN(new Date(clientCreatedAt).getTime())) throw new HttpError(422, "INVALID_RESULT", "createdAt 不合法")
 
-    const saved = await inTransaction(database, async function() {
+    let saved
+    try { saved = await inTransaction(database, async function() {
       const createdAt = nowIso()
       const insert = await database.prepare(`
         INSERT INTO assessment_results
@@ -298,10 +311,54 @@ function createServices(database, config, options) {
           VALUES (?, ?, ?, ?, ?, ?, ?, '待确认', ?, ?)
         `).run(resultId, user.id, user.class_id, semester.id, riskLevel, task ? task.title : assessmentName, summary, createdAt, createdAt)
       }
-      await audit(user.id, "提交测评结果", "assessment_result", resultId, { submissionId: submissionId, riskLevel: riskLevel })
+      await audit(user.id, "提交测评结果", "assessment_result", resultId, { submissionId: submissionId, riskLevel: riskLevel, consentVersion:payload.webConsentVersion || null, consentAt:payload.webConsentVersion ? createdAt : null })
       return database.prepare("SELECT * FROM assessment_results WHERE id = ?").get(resultId)
     })
+    } catch (error) {
+      // A concurrent retry may win the UNIQUE submission_id insert before this transaction.
+      const committed = await database.prepare("SELECT * FROM assessment_results WHERE submission_id = ?").get(submissionId)
+      if (committed && committed.student_user_id === user.id) return { result:mapResultSummary(committed), idempotent:true }
+      throw error
+    }
     return { result: mapResultSummary(saved), idempotent: false }
+  }
+
+  async function getStudentCatalog(user) {
+    requireRole(user, "student")
+    return { assessments:assessmentCatalog, faq:faqCatalog, consentVersion:CONSENT_VERSION }
+  }
+
+  async function submitWebAssessment(user, input) {
+    requireRole(user, "student")
+    input = input || {}
+    if (input.consent !== true || input.consentVersion !== CONSENT_VERSION) {
+      throw new HttpError(422, "CONSENT_REQUIRED", "请阅读并同意当前测评信息处理说明")
+    }
+    const assessment = assessmentCatalog.find(item => item.id === input.assessmentId)
+    if (!assessment || !input.answers || typeof input.answers !== "object" || Array.isArray(input.answers)) {
+      throw new HttpError(422, "INVALID_ANSWERS", "测评或答案格式不正确")
+    }
+    if (input.questionnaireVersion !== assessment.questionnaireVersion || input.scoringVersion !== assessment.scoringVersion) {
+      throw new HttpError(409, "VERSION_MISMATCH", "问卷版本已变化，请刷新后重新确认")
+    }
+    const keys = Object.keys(input.answers)
+    if (keys.length !== assessment.questions.length || keys.some(key => !/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= assessment.questions.length)) {
+      throw new HttpError(422, "INVALID_ANSWERS", "请完成全部题目后提交")
+    }
+    const answerSnapshot = assessment.questions.map((q, index) => {
+      const selectedIndex = input.answers[index]
+      if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= q.options.length) {
+        throw new HttpError(422, "INVALID_ANSWERS", "答案选项不正确")
+      }
+      return { questionId:q.id, selectedIndex }
+    })
+    const scored = calculateServerScore(assessment.id, assessment.questionnaireVersion, assessment.scoringVersion, answerSnapshot)
+    const snapshot = scoringEngine.createResultSnapshot({
+      assessment, questions:assessment.questions, rule:scored.rule, outcome:scored.outcome, now:new Date(now())
+    })
+    return submitAssessmentResult(user, Object.assign(snapshot, {
+      submissionId:input.submissionId, taskId:input.taskId || "", webConsentVersion:CONSENT_VERSION
+    }))
   }
 
   async function getMyResults(user) {
@@ -475,28 +532,54 @@ function createServices(database, config, options) {
 
   async function createSemester(user, input) {
     requireRole(user, "admin")
-    const name = String(input.name || "").trim()
-    const startDate = validDate(input.startDate, "startDate")
-    const endDate = validDate(input.endDate, "endDate")
-    if (!name) throw new HttpError(422, "INVALID_SEMESTER", "学期名称不能为空")
-    if (startDate > endDate) throw new HttpError(422, "INVALID_SEMESTER", "结束日期不能早于开始日期")
+    const {name,startDate,endDate,firstMonday}=semesterInput(input)
     const id = String(input.id || "semester-" + crypto.randomUUID()).trim()
-    try {
-      await database.prepare("INSERT INTO semesters (id, name, start_date, end_date, status, created_at) VALUES (?, ?, ?, ?, '未开始', ?)")
-        .run(id, name, startDate, endDate, nowIso())
-    } catch (error) {
-      throw new HttpError(409, "SEMESTER_EXISTS", "学期编号或名称已存在")
-    }
-    await audit(user.id, "创建学期", "semester", id, { name: name })
-    return mapSemester(await database.prepare("SELECT * FROM semesters WHERE id = ?").get(id))
+    if(!/^[a-zA-Z0-9_-]{1,64}$/.test(id))throw new HttpError(422,'INVALID_SEMESTER','学期编号须为64位以内的字母、数字、短横线或下划线')
+    return inTransaction(database,async()=>{
+      try {
+        await database.prepare("INSERT INTO semesters (id, name, start_date, end_date, status, created_at) VALUES (?, ?, ?, ?, '未开始', ?)")
+          .run(id, name, startDate, endDate, nowIso())
+      } catch (error) {
+        if(error.code==='ER_DUP_ENTRY'||/UNIQUE constraint failed/.test(error.message))throw new HttpError(409, "SEMESTER_EXISTS", "学期编号或名称已存在")
+        throw error
+      }
+      if(firstMonday)await database.prepare('INSERT INTO weekly_calendars(semester_id,first_monday,updated_at) VALUES(?,?,?)').run(id,firstMonday,nowIso())
+      await audit(user.id, "创建学期", "semester", id, { name,firstMonday })
+      return mapSemester(await database.prepare("SELECT * FROM semesters WHERE id = ?").get(id))
+    })
+  }
+
+  async function updateSemester(user,semesterId,input){
+    requireRole(user,'admin')
+    const value=semesterInput(input)
+    return inTransaction(database,async()=>{
+      const existing=await database.prepare('SELECT * FROM semesters WHERE id=?'+(database.dialect==='mysql'?' FOR UPDATE':'')).get(semesterId)
+      if(!existing)throw new HttpError(404,'SEMESTER_NOT_FOUND','学期不存在')
+      const oldCalendar=await database.prepare('SELECT first_monday FROM weekly_calendars WHERE semester_id=?').get(semesterId)
+      const firstMonday=value.firstMonday||oldCalendar?.first_monday||semesterMonday(existing.start_date)
+      validateFirstMonday(firstMonday,value.startDate,value.endDate)
+      const changed=existing.name!==value.name||existing.start_date!==value.startDate||existing.end_date!==value.endDate||firstMonday!==(oldCalendar?.first_monday||semesterMonday(existing.start_date))
+      if(changed&&await database.prepare('SELECT id FROM weekly_records WHERE semester_id=? LIMIT 1').get(semesterId))throw new HttpError(409,'SEMESTER_USED','该学期已有周台账，不能更改学期名称、日期或教学周，历史记录保持不变')
+      try{await database.prepare('UPDATE semesters SET name=?,start_date=?,end_date=? WHERE id=?').run(value.name,value.startDate,value.endDate,semesterId)}catch(error){
+        if(error.code==='ER_DUP_ENTRY'||/UNIQUE constraint failed/.test(error.message))throw new HttpError(409,'SEMESTER_EXISTS','学期名称已存在')
+        throw error
+      }
+      if(value.firstMonday){
+        if(oldCalendar)await database.prepare('UPDATE weekly_calendars SET first_monday=?,updated_at=? WHERE semester_id=?').run(firstMonday,nowIso(),semesterId)
+        else await database.prepare('INSERT INTO weekly_calendars(semester_id,first_monday,updated_at) VALUES(?,?,?)').run(semesterId,firstMonday,nowIso())
+      }
+      await audit(user.id,'修改学期设置','semester',semesterId,{name:value.name,firstMonday:value.firstMonday})
+      return mapSemester(await database.prepare('SELECT * FROM semesters WHERE id=?').get(semesterId))
+    })
   }
 
   async function setCurrentSemester(user, semesterId) {
     requireRole(user, "admin")
-    const target = await database.prepare("SELECT * FROM semesters WHERE id = ?").get(semesterId)
-    if (!target) throw new HttpError(404, "SEMESTER_NOT_FOUND", "学期不存在")
-    const previous = await currentSemester()
     await inTransaction(database, async function() {
+      if(database.dialect==='mysql')await database.prepare('SELECT id FROM semesters ORDER BY id FOR UPDATE').all()
+      const target = await database.prepare("SELECT * FROM semesters WHERE id = ?").get(semesterId)
+      if (!target) throw new HttpError(404, "SEMESTER_NOT_FOUND", "学期不存在")
+      const previous = await currentSemester()
       await database.prepare("UPDATE semesters SET status = '已归档' WHERE status = '当前学期' AND id <> ?").run(semesterId)
       await database.prepare("UPDATE semesters SET status = '当前学期' WHERE id = ?").run(semesterId)
       await audit(user.id, "切换当前学期", "semester", semesterId, { previousSemesterId: previous ? previous.id : "" })
@@ -720,8 +803,8 @@ function createServices(database, config, options) {
     requireRole(user, "admin")
     const item = await database.prepare("SELECT * FROM content_items WHERE id = ?").get(Number(contentId))
     if (!item) throw new HttpError(404, "CONTENT_NOT_FOUND", "内容不存在")
-    if (item.status !== "待审核") throw new HttpError(409, "CONTENT_ALREADY_REVIEWED", "内容已经完成审核")
     const status = String(input && input.status || "")
+    if (item.status !== "待审核" && !(item.status === "已发布" && status === "已退回")) throw new HttpError(409, "CONTENT_ALREADY_REVIEWED", "内容已经完成审核")
     if (["已发布", "已退回"].indexOf(status) === -1) throw new HttpError(422, "INVALID_STATUS", "审核状态只能是已发布或已退回")
     const reviewNote = String(input && input.reviewNote || "").trim().slice(0, 500)
     if (status === "已退回" && !reviewNote) throw new HttpError(422, "REVIEW_NOTE_REQUIRED", "退回内容必须填写原因")
@@ -782,7 +865,14 @@ function createServices(database, config, options) {
     return result
   }
 
+  const registryServices = createRegistryServices(database, { requireRole, audit, nowIso, dataProtector })
   return {
+    ...registryServices,
+    ...createWeeklyServices(database, { demoMode:config.weeklyPreview===true, requireRole, audit, nowIso, dataProtector, listRegistryStudents:registryServices.listRegistryStudents, getRegistryStudent:registryServices.getRegistryStudent }),
+    ...createCommitteeServices(database, { config, requireRole, audit, nowIso, dataProtector }),
+    ...createGradeApplicationServices(database, config, { requireRole, audit, nowIso, dataProtector, getRegistryStudent:registryServices.getRegistryStudent }),
+    ...createHolidayServices(database, config, { requireRole, audit, nowIso, dataProtector, getRegistryStudent:registryServices.getRegistryStudent, listRegistryStudents:registryServices.listRegistryStudents }),
+    ...createTalkServices(database, config, { requireRole, audit, nowIso, dataProtector, getRegistryStudent:registryServices.getRegistryStudent }),
     ...counselorAdministration,
     ...createStudentAccountServices(database, { requireRole, publicUser, audit, nowIso, dataProtector }),
     getAccount: publicUser,
@@ -794,6 +884,8 @@ function createServices(database, config, options) {
     listAssessmentTasks,
     submitAssessmentResult,
     getMyResults,
+    getStudentCatalog,
+    submitWebAssessment,
     listCounselorClasses,
     classSummary,
     listRiskEvents,
@@ -801,6 +893,7 @@ function createServices(database, config, options) {
     getStudentSupportSummary,
     listSemesters,
     createSemester,
+    updateSemester,
     setCurrentSemester,
     createCounselorAssignment,
     revokeCounselorAssignment,

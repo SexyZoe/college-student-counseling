@@ -23,7 +23,7 @@ let baseUrl
 test.before(async function() {
   database = openDatabase(":memory:")
   await seedDemoData(database)
-  const services = createServices(database, config)
+  const services = createServices(database, { ...config, staffOnly:false }, { now:() => Date.parse("2026-09-01T04:00:00Z") })
   server = http.createServer(createHttpApp(services, config))
   await new Promise(function(resolve) { server.listen(0, "127.0.0.1", resolve) })
   baseUrl = "http://127.0.0.1:" + server.address().port
@@ -313,7 +313,7 @@ test("后端测评数据闭环", async function(t) {
     assert.equal(response.body.data[0].title, "理性表达与网络素养")
 
     response = await api("/api/v1/admin/content-items/" + contentId + "/review", {
-      method:"PATCH", headers:authHeaders(admin.token), body:JSON.stringify({ status:"已退回", reviewNote:"重复审核" })
+      method:"PATCH", headers:authHeaders(admin.token), body:JSON.stringify({ status:"已发布", reviewNote:"重复审核" })
     })
     assert.equal(response.status, 409)
   })

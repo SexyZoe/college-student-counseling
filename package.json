@@ -1,13 +1,31 @@
 {
   "name": "shuzhi-heart-harbor",
-  "version": "1.0.0",
-  "description": "数智心港湾微信小程序",
-  "scripts": {
-    "test": "node tests/auth.test.js && node tests/login-page.test.js && node tests/cloud-login.test.js && node tests/scoring-engine.test.js && node tests/semester.test.js && node tests/backend-sync.test.js && node tests/source-integrity.test.js && node --test server/test/*.test.js",
-    "server": "node server/src/index.js",
-    "server:test": "node --test server/test/api.test.js"
+  "version": "2.0.0",
+  "private": true,
+  "description": "数智心港湾校园内网网页应用",
+  "engines": {
+    "node": ">=22.13.0"
   },
-  "dependencies": {
-    "@vant/weapp": "^1.11.6"
+  "scripts": {
+    "start": "node server/src/index.js",
+    "preview:weekly": "node scripts/weekly-preview.js",
+    "preview:committee": "node scripts/committee-preview.js",
+    "test:committee:web": "node scripts/committee-e2e.js",
+    "test:weekly:web": "node scripts/weekly-e2e.js",
+    "server": "node server/src/index.js",
+    "test": "node tests/scoring-engine.test.js && node --test server/test/*.test.js",
+    "test:web": "node scripts/web-e2e.js && node scripts/talks-e2e.js && node scripts/weekly-e2e.js && node scripts/committee-e2e.js && node scripts/applications-e2e.js && node scripts/holidays-e2e.js && node scripts/admin-e2e.js && node scripts/committee-export-e2e.js",
+    "server:test": "node --test server/test/*.test.js",
+    "check:release": "node scripts/release-check.js",
+    "preview:applications": "node scripts/application-preview.js",
+    "test:applications:web": "node scripts/applications-e2e.js",
+    "preview:holidays": "node scripts/holiday-preview.js",
+    "test:holidays:web": "node scripts/holidays-e2e.js",
+    "test:admin:web": "node scripts/admin-e2e.js",
+    "test:committee:export:web": "node scripts/committee-export-e2e.js"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1",
+    "qrcode": "^1.5.4"
   }
 }

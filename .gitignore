@@ -12,3 +12,11 @@ server/*.db-shm
 server/*.db-wal
 backups/
 compose.override.yaml
+
+artifacts/
+outputs/
+playwright-report/
+test-results/
+*.pem
+*.key
+.school-release/

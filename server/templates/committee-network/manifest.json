@@ -1,0 +1,12 @@
+{
+  "source": "信息工程学院-心理危机四级预警网络（202610）.xlsx",
+  "sourceSha256": "18b0818af90227d32fcfcb42226c4b24b74c2e22a611b97aa33e171d1da41022",
+  "sha256": "c2de5e084ed4dbad07db8c19057a58e4fa8b6a0cccaf3502d0147a9d40f7dcb7",
+  "sheets": [
+    "正面",
+    "反面"
+  ],
+  "columns": 6,
+  "headerRows": 4,
+  "samplePersonalDataRemoved": true
+}

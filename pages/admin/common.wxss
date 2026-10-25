@@ -1,2 +1,0 @@
-@import "../counselor/common.wxss";
-.admin-head { background:linear-gradient(135deg,#655b7b,#596e91); }.admin-value { color:#75668d; }.admin-btn { background:linear-gradient(135deg,#75668d,#596e91); }.danger-link { color:#c85d68; font-size:23rpx; }.table-row { display:flex; align-items:center; padding:20rpx 0; border-bottom:1rpx solid #edf0ef; }.table-row:last-child { border-bottom:0; }.table-main { flex:1; }.status-action { padding:8rpx 16rpx; border-radius:20rpx; color:#fff; background:#75668d; font-size:21rpx; }.status-reject { background:#b0b0b0; margin-left:10rpx; }

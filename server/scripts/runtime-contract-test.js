@@ -167,7 +167,32 @@ async function main() {
   response = await json("/api/v1/admin/counselors/T001/reset-password", "POST", adminToken, {})
   assert.equal(response.status, 200)
 
-  console.log("运行时契约测试通过：强制改密、测评、风险、任务、内容、人员导入回滚和审计闭环均正常")
+  // Exercise the browser protocol on the same MySQL runtime, not only legacy Bearer requests.
+  const browserLogin = await fetch(baseUrl + "/api/v1/auth/login", {
+    method:"POST", headers:{ "content-type":"application/json", "X-Requested-With":"campus-web" },
+    body:JSON.stringify({ client:"web", role:"student", accountId:"2024001", password:"123456" })
+  })
+  assert.equal(browserLogin.status, 200)
+  const browserCookie = browserLogin.headers.get("set-cookie").split(";")[0]
+  const browserHeaders = { cookie:browserCookie, "content-type":"application/json", "X-Requested-With":"campus-web" }
+  const catalogResponse = await request("/api/v1/student/catalog", { headers:browserHeaders })
+  assert.equal(catalogResponse.status, 200)
+  for (const assessment of catalogResponse.body.data.assessments) {
+    const payload = {
+      submissionId:"browser-contract:" + suffix + ":" + assessment.id,
+      assessmentId:assessment.id, questionnaireVersion:assessment.questionnaireVersion,
+      scoringVersion:assessment.scoringVersion, consent:true, consentVersion:catalogResponse.body.data.consentVersion,
+      answers:Object.fromEntries(assessment.questions.map((q,i) => [i,i%4]))
+    }
+    const options = { method:"POST", headers:browserHeaders, body:JSON.stringify(payload) }
+    const saved = await request("/api/v1/student/submissions", options)
+    assert.equal(saved.status, 201, JSON.stringify(saved.body))
+    const retry = await request("/api/v1/student/submissions", options)
+    assert.equal(retry.body.data.idempotent, true)
+    assert.equal(retry.body.data.result.id, saved.body.data.result.id)
+  }
+
+  console.log("运行时契约测试通过：强制改密、测评、风险、任务、内容、人员导入回滚、审计及网页Cookie/8套量表提交闭环均正常")
 }
 
 main().catch(function(error) {
