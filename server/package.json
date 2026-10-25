@@ -24,7 +24,7 @@
     "@xmldom/xmldom": "0.9.12",
     "exceljs": "4.4.0",
     "jszip": "3.10.1",
-    "mysql2": "^3.14.4",
+    "mysql2": "^3.24.6",
     "pdf-lib": "1.17.1"
   },
   "overrides": {
