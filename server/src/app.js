@@ -98,6 +98,84 @@ function createHttpApp(services, config, options) {
         return sendOk(response, await services.counselorProfile(user, request.method === "PATCH" ? await readJson(request, config.maxBodyBytes) : undefined))
       }
       const registryFilters = Object.fromEntries(url.searchParams)
+      if(request.method==='GET'&&path==='/api/v1/holiday-periods')return sendOk(response,await services.listHolidayPeriods(user))
+      if(request.method==='POST'&&path==='/api/v1/holiday-periods')return sendOk(response,await services.saveHolidayPeriod(user,await readJson(request,config.maxBodyBytes)),201)
+      const holidayPeriod=path.match(/^\/api\/v1\/holiday-periods\/([^/]+)$/)
+      if(request.method==='PATCH'&&holidayPeriod)return sendOk(response,await services.saveHolidayPeriod(user,await readJson(request,config.maxBodyBytes),holidayPeriod[1]))
+      if(request.method==='GET'&&path==='/api/v1/holiday-departures')return sendOk(response,await services.listHolidayDepartures(user,registryFilters))
+      if(request.method==='POST'&&path==='/api/v1/holiday-departures/batch')return sendOk(response,await services.batchHolidayDepartures(user,await readJson(request,config.maxBodyBytes)))
+      if(request.method==='POST'&&path==='/api/v1/holiday-departures/evidence'){
+        enforceRateLimit(limiter,response,'holiday-image:'+user.id,20)
+        return sendOk(response,await services.uploadHolidayEvidence(user,await readBinary(request,2*1024*1024),request.headers['content-type']),201)
+      }
+      const holidayImage=path.match(/^\/api\/v1\/holiday-departures\/evidence\/([^/]+)$/)
+      if(request.method==='GET'&&holidayImage){const result=await services.getHolidayEvidence(user,holidayImage[1]);response.setHeader('Content-Type',result.mimeType);response.setHeader('Content-Disposition','inline; filename=parent-confirmation.'+(result.mimeType==='image/png'?'png':'jpg'));return response.end(Buffer.from(result.base64,'base64'))}
+      if(request.method==='POST'&&path==='/api/v1/holiday-departures/export'){
+        const result=await services.exportHolidayWorkbook(user,await readJson(request,config.maxBodyBytes));response.setHeader('Content-Type',result.mimeType);response.setHeader('Content-Disposition',"attachment; filename=holiday-departures.xlsx; filename*=UTF-8''"+encodeURIComponent(result.fileName));return response.end(result.buffer)
+      }
+      const holidayHistory=path.match(/^\/api\/v1\/holiday-departures\/([^/]+)\/versions$/)
+      if(request.method==='GET'&&holidayHistory)return sendOk(response,await services.getHolidayDepartureVersions(user,holidayHistory[1],registryFilters))
+      const holidayRecord=path.match(/^\/api\/v1\/holiday-departures\/([^/]+)$/)
+      if(request.method==='GET'&&holidayRecord)return sendOk(response,await services.getHolidayDeparture(user,holidayRecord[1],registryFilters))
+      if(request.method==='PUT'&&holidayRecord)return sendOk(response,await services.saveHolidayDeparture(user,holidayRecord[1],await readJson(request,config.maxBodyBytes)))
+      if(request.method==='GET'&&path==='/api/v1/grade-applications')return sendOk(response,await services.listGradeApplications(user,registryFilters))
+      if(request.method==='POST'&&path==='/api/v1/grade-applications')return sendOk(response,await services.saveGradeApplication(user,await readJson(request,config.maxBodyBytes)),201)
+      const gradeAction=path.match(/^\/api\/v1\/grade-applications\/([^/]+)\/(versions|document)$/)
+      if(gradeAction){
+        if(request.method==='GET'&&gradeAction[2]==='versions')return sendOk(response,await services.getGradeApplicationVersions(user,gradeAction[1]))
+        if(request.method==='GET'&&gradeAction[2]==='document'){
+          enforceRateLimit(limiter,response,'grade-document:'+user.id,15)
+          const result=await services.exportGradeApplication(user,gradeAction[1],registryFilters)
+          if(registryFilters.format==='preview')return sendOk(response,{pages:result.pages,pdfBase64:result.pdfBase64})
+          response.setHeader('Content-Type',result.mimeType)
+          response.setHeader('Content-Disposition',(registryFilters.preview==='1'?'inline':'attachment')+"; filename=grade-application."+(registryFilters.format||'pdf')+"; filename*=UTF-8''"+encodeURIComponent(result.fileName))
+          response.setHeader('X-Frame-Options','SAMEORIGIN')
+          response.setHeader('Content-Security-Policy',"default-src 'none'; frame-ancestors 'self'")
+          return response.end(result.buffer)
+        }
+      }
+      const gradeRecord=path.match(/^\/api\/v1\/grade-applications\/([^/]+)$/)
+      if(gradeRecord&&request.method==='GET')return sendOk(response,await services.getGradeApplication(user,gradeRecord[1]))
+      if(gradeRecord&&request.method==='PATCH')return sendOk(response,await services.saveGradeApplication(user,await readJson(request,config.maxBodyBytes),gradeRecord[1]))
+      if(request.method==='GET'&&path==='/api/v1/committee/classes')return sendOk(response,await services.listCommitteeClasses(user,registryFilters))
+      if(request.method==='POST'&&path==='/api/v1/committee/classes')return sendOk(response,await services.saveCommitteeClass(user,await readJson(request,config.maxBodyBytes)),201)
+      const committeeClass=path.match(/^\/api\/v1\/committee\/classes\/([^/]+)$/)
+      if(request.method==='GET'&&committeeClass)return sendOk(response,await services.getCommitteeClass(user,committeeClass[1]))
+      if(request.method==='PATCH'&&committeeClass)return sendOk(response,await services.saveCommitteeClass(user,await readJson(request,config.maxBodyBytes),committeeClass[1]))
+      const committeeCopy=path.match(/^\/api\/v1\/committee\/classes\/([^/]+)\/copy$/)
+      if(request.method==='POST'&&committeeCopy)return sendOk(response,await services.copyCommitteeClass(user,committeeCopy[1],await readJson(request,config.maxBodyBytes)),201)
+      const committeeMembers=path.match(/^\/api\/v1\/committee\/classes\/([^/]+)\/members(?:\/([^/]+))?$/)
+      if(committeeMembers&&((request.method==='POST'&&!committeeMembers[2])||(request.method==='PATCH'&&committeeMembers[2])))return sendOk(response,await services.saveCommitteeMember(user,committeeMembers[1],await readJson(request,config.maxBodyBytes),committeeMembers[2]),committeeMembers[2]?200:201)
+      if(request.method==='PATCH'&&path==='/api/v1/committee/college-headers')return sendOk(response,await services.saveCommitteeHeaders(user,await readJson(request,config.maxBodyBytes)))
+      if(request.method==='POST'&&path==='/api/v1/committee/export/options')return sendOk(response,await services.getCommitteeExportOptions(user,await readJson(request,config.maxBodyBytes)))
+      if(request.method==='POST'&&path==='/api/v1/committee/export/preview'){
+        enforceRateLimit(limiter,response,'committee-preview:'+user.id,12)
+        return sendOk(response,await services.previewCommitteeExport(user,await readJson(request,config.maxBodyBytes)))
+      }
+      if(request.method==='POST'&&path==='/api/v1/committee/export'){
+        const result=await services.exportCommitteeWorkbook(user,await readJson(request,config.maxBodyBytes))
+        response.setHeader('Content-Type',result.mimeType)
+        response.setHeader('Content-Disposition',"attachment; filename=committee-export."+(result.mimeType==='application/zip'?'zip':'xlsx')+"; filename*=UTF-8''"+encodeURIComponent(result.fileName))
+        return response.end(result.buffer)
+      }
+      if(request.method === "GET" && path === "/api/v1/weekly-ledgers/options")return sendOk(response,await services.getWeeklyOptions(user))
+      if(request.method === "GET" && path === "/api/v1/weekly-ledgers")return sendOk(response,await services.listWeeklyLedgers(user,registryFilters))
+      const weeklyCalendar=path.match(/^\/api\/v1\/weekly-ledgers\/calendars\/([^/]+)$/)
+      if(request.method === "PATCH" && weeklyCalendar)return sendOk(response,await services.saveWeeklyCalendar(user,weeklyCalendar[1],await readJson(request,config.maxBodyBytes)))
+      const weeklyVersions=path.match(/^\/api\/v1\/weekly-ledgers\/records\/([^/]+)\/versions$/)
+      if(request.method === "GET" && weeklyVersions)return sendOk(response,await services.getWeeklyVersions(user,weeklyVersions[1]))
+      const weeklyHistory=path.match(/^\/api\/v1\/weekly-ledgers\/students\/([^/]+)\/history$/)
+      if(request.method === "GET" && weeklyHistory)return sendOk(response,await services.getWeeklyHistory(user,weeklyHistory[1]))
+      const weeklyStudent=path.match(/^\/api\/v1\/weekly-ledgers\/students\/([^/]+)$/)
+      if(request.method === "GET" && weeklyStudent)return sendOk(response,await services.getWeeklyStudent(user,weeklyStudent[1],registryFilters))
+      if(request.method === "POST" && weeklyStudent)return sendOk(response,await services.saveWeeklyRecord(user,weeklyStudent[1],await readJson(request,config.maxBodyBytes)))
+      if(request.method === "POST" && path === "/api/v1/weekly-ledgers/print")return sendOk(response,await services.printWeeklyLedgers(user,await readJson(request,config.maxBodyBytes)))
+      if(request.method === "POST" && path === "/api/v1/weekly-ledgers/export"){
+        const buffer=await services.exportWeeklyWorkbook(user,await readJson(request,config.maxBodyBytes))
+        response.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response.setHeader("Content-Disposition","attachment; filename=weekly-ledger.xlsx; filename*=UTF-8''"+encodeURIComponent("严重心理问题学生周台账表.xlsx"))
+        return response.end(buffer)
+      }
       if (request.method === "GET" && path === "/api/v1/talk-records/options") return sendOk(response, await services.getTalkMetadata(user))
       if (request.method === "GET" && path === "/api/v1/talk-records") return sendOk(response, await services.listTalkRecords(user, registryFilters))
       if (request.method === "POST" && path === "/api/v1/talk-records") return sendOk(response, await services.saveTalkRecord(user, await readJson(request, config.maxBodyBytes)), 201)
@@ -201,6 +279,10 @@ function createHttpApp(services, config, options) {
       const currentSemesterMatch = path.match(/^\/api\/v1\/admin\/semesters\/([^/]+)\/current$/)
       if (request.method === "PATCH" && currentSemesterMatch) {
         return sendOk(response, await services.setCurrentSemester(user, decodeURIComponent(currentSemesterMatch[1])))
+      }
+      const semesterMatch = path.match(/^\/api\/v1\/admin\/semesters\/([^/]+)$/)
+      if (request.method === 'PATCH' && semesterMatch) {
+        return sendOk(response, await services.updateSemester(user, decodeURIComponent(semesterMatch[1]), await readJson(request, config.maxBodyBytes)))
       }
       if (request.method === "POST" && path === "/api/v1/admin/counselor-assignments") {
         return sendOk(response, await services.createCounselorAssignment(user, await readJson(request, config.maxBodyBytes)), 201)
@@ -308,6 +390,12 @@ function routeLabel(pathname) {
     .replace(/\/media\/[^/]+/g, "/media/:id")
     .replace(/\/registry\/import\/(?!preview(?:\/|$))[^/]+/g, "/registry/import/:id")
     .replace(/\/talk-records\/(?!options(?:\/|$))[^/]+/g, "/talk-records/:id")
+    .replace(/\/weekly-ledgers\/(students|records|calendars)\/[^/]+/g,"/weekly-ledgers/$1/:id")
+    .replace(/\/committee\/classes\/[^/]+(?:\/members\/[^/]+)?/g,'/committee/classes/:id')
+    .replace(/\/grade-applications\/[^/]+/g,'/grade-applications/:id')
+    .replace(/\/holiday-periods\/[^/]+/g,'/holiday-periods/:id')
+    .replace(/\/holiday-departures\/evidence\/[^/]+/g,'/holiday-departures/evidence/:id')
+    .replace(/\/holiday-departures\/(?!batch$|export$|evidence$)[^/]+/g,'/holiday-departures/:id')
     .replace(/\/(classes|risk-events|students|counselors|semesters|import-batches)\/[^/]+/g, "/$1/:id") || "/"
 }
 
@@ -425,6 +513,10 @@ async function serveWebAsset(response, requestPath, configuredRoot) {
     "/web/registry.js":"registry.js",
     "/web/registry.css":"registry.css",
     "/web/talks.js":"talks.js",
+    "/web/weekly.js":"weekly.js",
+    "/web/committee.js":"committee.js",
+    "/web/applications.js":"applications.js",
+    "/web/holidays.js":"holidays.js",
     "/web/styles.css":"styles.css",
     "/web/student.js":"student.js",
     "/web/personality.js":"personality.js",

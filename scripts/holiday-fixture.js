@@ -1,0 +1,8 @@
+const fs=require('node:fs'),path=require('node:path'),{applicationFixture}=require('./application-fixture')
+async function holidayFixture(){const f=await applicationFixture(),{db,services,people}=f,admin=db.prepare("SELECT * FROM users WHERE role='admin'").get(),first=db.prepare("SELECT * FROM users WHERE id='counselor-t001'").get(),second=db.prepare("SELECT * FROM users WHERE staff_no='T002'").get(),holiday=await services.saveHolidayPeriod(first,{name:'国庆假期（演示）',startDate:'2026-09-30',endDate:'2026-10-07',levelMonth:'2026-09'}),image=fs.readFileSync(path.join(__dirname,'fixtures/holiday-confirmation.png')),assets=[await services.uploadHolidayEvidence(first,image,'image/png'),await services.uploadHolidayEvidence(second,image,'image/png')]
+ // Shared school dates are seeded directly; administrators cannot write business forms.
+ db.prepare('UPDATE holiday_periods SET owner_user_id=NULL WHERE id=?').run(holiday.id);holiday.ownerId=null;holiday.shared=true
+ for(let i=0;i<people.length;i++){const user=i<4?first:second;for(const date of ['2026-09-30','2026-10-01','2026-10-02','2026-10-07']){if(i===3&&date==='2026-10-07')continue;const leaving=i%3!==2;await services.saveHolidayDeparture(user,people[i].id,{holidayId:holiday.id,date,revision:0,leaveSchool:leaving?'是':'否',leaveDate:leaving?'2026-09-30':'',destination:leaving?'回家':'留校',parentReport:leaving?'已确认到家':'家长已知晓留校',evidenceId:assets[i<4?0:1].id,remarks:'虚构演示记录',psychologicalStatus:i===1&&date==='2026-10-01'?'不稳定':'稳定',returned:date==='2026-10-07'?(leaving?'是':''):'',returnReason:''})}}
+ return {...f,holiday,holidayAssets:assets}
+}
+module.exports={holidayFixture}

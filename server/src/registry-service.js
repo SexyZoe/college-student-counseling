@@ -1,9 +1,11 @@
+const {requireDataWriter}=require('./business-permissions')
 const crypto = require('node:crypto')
 const { HttpError } = require('./errors')
 const { inTransaction } = require('./database')
 const { readRegistryWorkbook, writeRegistryWorkbook } = require('./registry-workbook')
+const { updateLevelHistory } = require('./registry-levels')
 
-const FIELDS = { college:100, name:50, gender:10, gradeMajor:150, phone:100, dorm:100, counselorInfo:200, studentSupport:1000, leaderSupport:1000, remarks:3000, studentNo:50 }
+const FIELDS = { college:100, campus:100, major:150, name:50, gender:10, gradeMajor:150, phone:100, dorm:100, counselorInfo:200, studentSupport:1000, leaderSupport:1000, remarks:3000, studentNo:50 }
 function monthValue(value) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(value || ''))) throw new HttpError(422, 'REGISTRY_MONTH_INVALID', '请选择有效的等级年月')
   return String(value)
@@ -34,7 +36,7 @@ function createRegistryServices(database, context) {
   const { requireRole, audit, nowIso, dataProtector } = context
   function staff(user) { requireRole(user, ['admin', 'counselor']) }
   function unpack(row) {
-    return { ...dataProtector.unprotectJson(row.record_json, 'registry:' + row.id), id:row.id, counselorId:row.counselor_user_id,
+    return { campus:'',major:'', ...dataProtector.unprotectJson(row.record_json, 'registry:' + row.id), id:row.id, counselorId:row.counselor_user_id,
       counselorName:row.counselor_name || '', revision:Number(row.revision), createdAt:row.created_at, updatedAt:row.updated_at }
   }
   async function owner(user, requested) {
@@ -84,14 +86,17 @@ function createRegistryServices(database, context) {
   }
   async function insert(record, counselorId) {
     const id = crypto.randomUUID(), timestamp = nowIso()
+    if(!record.levelHistory)record.levelHistory=updateLevelHistory(null,record,{},timestamp)
     await database.prepare('INSERT INTO registry_students (id, counselor_user_id, record_json, revision, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)')
       .run(id, counselorId, dataProtector.protectJson(record, 'registry:' + id), timestamp, timestamp)
     return id
   }
   async function saveRecord(user, input, id) {
-    staff(user)
+    requireDataWriter(user)
     const record = normalizeRecord(input)
     const existing = id ? await getRecord(user, id) : null
+    for(const key of ['campus','major'])if(existing&&!Object.hasOwn(input,key))record[key]=existing[key]||''
+    record.levelHistory=updateLevelHistory(existing,record,input,nowIso())
     const responsible = existing ? { id:existing.counselorId, display_name:existing.counselorName } : await owner(user, input.counselorId)
     if (!record.counselorInfo) record.counselorInfo = responsible.display_name
     await inTransaction(database, async () => {
@@ -128,6 +133,7 @@ function createRegistryServices(database, context) {
     return { displayName:userRow.display_name, contact:row?.contact || '', college:row?.college || '' }
   }
   async function preview(user, buffer, input) {
+    requireDataWriter(user)
     const responsible = await owner(user, input.counselorId)
     const month = monthValue(input.month)
     const parsed = await readRegistryWorkbook(buffer, month)
@@ -160,7 +166,7 @@ function createRegistryServices(database, context) {
     return result
   }
   async function confirm(user, id, input = {}) {
-    staff(user)
+    requireDataWriter(user)
     return inTransaction(database, async () => {
       if (database.dialect === 'mysql') await database.prepare("SELECT id FROM users WHERE role = 'counselor' ORDER BY id FOR UPDATE").all()
       const row = await database.prepare('SELECT * FROM registry_imports WHERE id = ?' + (database.dialect === 'mysql' ? ' FOR UPDATE' : '')).get(id)

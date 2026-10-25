@@ -1,0 +1,94 @@
+(function(){
+ 'use strict'
+ window.createWeeklyUI=function({state,request,json,h,notice,modal,openDialog,dialogHead,heading,field,button,busy}){
+  let metadata=null,rows=[],period=null,dirty=false,includeIncomplete=false
+  const filters={semesterId:'',weekStart:'',q:'',counselorId:'',college:'',campus:'',status:''}
+  const labels={pending:'未填写',draft:'草稿',completed:'已填写'}
+  const add=(d,n)=>new Date(Date.parse(d+'T00:00:00Z')+n*86400000).toISOString().slice(0,10)
+  const monday=d=>add(d,-((new Date(d+'T00:00:00Z').getUTCDay()+6)%7))
+  const today=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
+  const time=v=>v?new Date(v).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'尚未保存'
+  const query=()=>new URLSearchParams(filters)
+  const studentUrl=id=>'/weekly-ledgers/students/'+encodeURIComponent(id)
+  const active=(epoch,userId)=>epoch===state.epoch&&userId===state.user?.id
+  window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}})
+  function cleanup(){metadata=null;rows=[];period=null;dirty=false;includeIncomplete=false;Object.keys(filters).forEach(k=>filters[k]='')}
+  function closeGuard(){modal.oncancel=e=>{if(dirty&&!confirm('内容尚未保存，确认放弃本次修改？'))e.preventDefault()};modal.onclose=()=>{dirty=false};modal.querySelectorAll('[data-close],#weekly-cancel').forEach(b=>b.onclick=()=>{if(!dirty||confirm('内容尚未保存，确认放弃本次修改？')){dirty=false;modal.close()}})}
+  function weeks(s){const result=[];for(let d=s.firstMonday;d<=monday(s.endDate);d=add(d,7))result.push(d);return result}
+  function weekOptions(s){return weeks(s).map((d,i)=>`<option value="${d}" ${d===filters.weekStart?'selected':''}>第${i+1}周 · ${d.slice(5)}—${add(d,6).slice(5)}</option>`).join('')}
+  function defaultWeek(s){const d=monday(today());return d<s.firstMonday?s.firstMonday:d>monday(s.endDate)?monday(s.endDate):d}
+  async function page(){
+   const epoch=++state.epoch,userId=state.user.id,admin=state.user.role==='admin'
+   document.getElementById('content').innerHTML='<p class="loading">正在读取一级学生周台账…</p>'
+   const meta=await request('/weekly-ledgers/options');if(!active(epoch,userId))return;metadata=meta
+   if(!meta.semesters.length){document.getElementById('content').innerHTML=heading('WEEKLY RECORDS','一级学生周台账','请先由管理员建立学期。',admin?button('学期管理 / 新增学期','weekly-manage-semesters','primary'):'');document.getElementById('weekly-manage-semesters')?.addEventListener('click',()=>document.querySelector('[data-page=semesters]').click());return}
+   const semester=meta.semesters.find(s=>s.id===filters.semesterId)||meta.semesters.find(s=>s.current)||meta.semesters[0]
+   filters.semesterId=semester.id;if(!weeks(semester).includes(filters.weekStart))filters.weekStart=defaultWeek(semester)
+   const data=await request('/weekly-ledgers?'+query());if(!active(epoch,userId))return
+   rows=data.rows;period=data.period
+   document.getElementById('content').innerHTML=heading('WEEKLY RECORDS','一级学生周台账',admin?'汇总查看各辅导员的每周记录，持续了解一级学生的关怀情况。':'一级名单自动带入，每周单独填写心理状况与备注。',admin?button('教学周设置','weekly-calendar','ghost')+button('学期管理','weekly-manage-semesters'):'')+`${meta.demo?'<p class="weekly-calendar-warning">本地演示使用示例学期日期，实际开学日期与教学周请按学校校历设置。</p>':''}<section class="weekly-period"><div><span class="eyebrow">${h(period.semesterName)}</span><h2>第 ${period.weekNumber} 教学周${semester.calendarConfigured?'':' <small class="weekly-calendar-label">默认推算</small>'}</h2><p>${h(period.weekStart)} — ${h(period.weekEnd)}</p></div><div class="weekly-period-note">按当周有效等级列入名单<br>已保存记录保留当时资料</div></section>${semester.calendarConfigured?'':'<p class="weekly-calendar-warning">教学周尚未设置，当前从学期开始日期所在周推算。请管理员按学校校历设置第1教学周。</p>'}<div class="stats weekly-stats">${[['本周名单',data.counts.total,'total'],['未填写',data.counts.pending,'pending'],['草稿',data.counts.draft,'draft'],['已填写',data.counts.completed,'completed']].map(([name,n,status])=>`<article class="weekly-stat-${status}"><span>${name}</span><strong>${n}<small>人</small></strong></article>`).join('')}</div><section class="panel"><form id="weekly-filter" class="filters"><label>学期<select name="semesterId">${meta.semesters.map(s=>`<option value="${h(s.id)}" ${s.id===semester.id?'selected':''}>${h(s.name)}</option>`).join('')}</select></label><label>教学周<select name="weekStart">${weekOptions(semester)}</select></label>${admin?`<label>负责辅导员<select name="counselorId"><option value="">全部辅导员</option>${state.counselors.map(c=>`<option value="${h(c.id)}" ${c.id===filters.counselorId?'selected':''}>${h(c.displayName)}${c.active?'':'（已停用）'}</option>`).join('')}</select></label>`:''}<label>填写状态<select name="status"><option value="">全部状态</option>${Object.entries(labels).map(([v,t])=>`<option value="${v}" ${v===filters.status?'selected':''}>${t}</option>`).join('')}</select></label><label class="search-label">搜索学生<input name="q" value="${h(filters.q)}" placeholder="姓名、学号、专业或学院"></label>${field('学院','college',filters.college,'placeholder="全部学院"')}${field('校区','campus',filters.campus,'placeholder="全部校区"')}<button class="button secondary" type="submit">查询</button>${button('重置','weekly-reset','ghost')}</form><div class="table-toolbar"><div><h2>本周学生名单 <span class="count">${rows.length}</span></h2><p>周一至周日内曾为一级的学生列入；历史已保存记录继续保留。</p><label class="check-line weekly-include"><input type="checkbox" id="weekly-incomplete" ${includeIncomplete?'checked':''}>导出与打印包含未完成记录</label></div><div class="actions">${button('导出 Excel','weekly-export')}${button('打印 / 保存 PDF','weekly-print')}</div></div><div class="table-scroll"><table class="weekly-table"><thead><tr><th>学生</th><th>学院 / 校区 / 专业</th><th>评级依据</th>${admin?'<th>负责辅导员</th>':''}<th>本周心理状况</th><th>备注</th><th>状态 / 最后保存</th><th>操作</th></tr></thead><tbody>${rows.length?rows.map(r=>`<tr><td><strong>${h(r.snapshot.name)}</strong><small class="cell-sub">${h(r.snapshot.studentNo)}</small></td><td>${h(r.snapshot.college)}<small class="cell-sub">${h(r.snapshot.campus)||'待补校区'} · ${h(r.snapshot.major)||'待补专业'}</small></td><td>${h(r.rating.level)||'—'}<small class="cell-sub">${h(r.rating.effectiveDate)} 生效</small></td>${admin?`<td>${h(r.counselorName)}</td>`:''}<td><div class="weekly-excerpt">${h(r.psychologicalStatus)||'<span class="muted">本周尚未填写</span>'}</div></td><td><div class="weekly-excerpt">${h(r.notes)||'—'}</div></td><td><span class="weekly-status ${r.status}">${labels[r.status]}</span><small class="cell-sub">${h(time(r.updatedAt))}</small></td><td><button class="text-button" data-weekly="${h(r.registryStudentId)}">${admin?'查看记录':'填写 / 查看'}</button></td></tr>`).join(''):`<tr><td colspan="${admin?8:7}"><div class="empty"><span>▦</span><h3>当前范围没有一级学生</h3><p>可调整教学周与查询条件，或在学生档案中核对等级及生效日期。</p></div></td></tr>`}</tbody></table></div><div class="table-foot">${h(period.label)} · 共 ${rows.length} 人</div></section>`
+   const form=document.getElementById('weekly-filter')
+   form.elements.semesterId.onchange=()=>{const s=meta.semesters.find(s=>s.id===form.elements.semesterId.value);form.elements.weekStart.innerHTML=weeks(s).map((d,i)=>`<option value="${d}" ${d===defaultWeek(s)?'selected':''}>第${i+1}周 · ${d.slice(5)}—${add(d,6).slice(5)}</option>`).join('')}
+   form.onsubmit=e=>{e.preventDefault();Object.assign(filters,Object.fromEntries(new FormData(form)));page().catch(e=>notice(e.message,true))}
+   document.getElementById('weekly-reset').onclick=()=>{Object.assign(filters,{q:'',counselorId:'',college:'',campus:'',status:''});page().catch(e=>notice(e.message,true))}
+   document.getElementById('weekly-incomplete').onchange=e=>{includeIncomplete=e.target.checked}
+   document.querySelectorAll('[data-weekly]').forEach(b=>b.onclick=()=>open(b.dataset.weekly).catch(e=>notice(e.message,true)))
+   document.getElementById('weekly-calendar')?.addEventListener('click',()=>calendar(semester))
+   document.getElementById('weekly-manage-semesters')?.addEventListener('click',()=>document.querySelector('[data-page=semesters]').click())
+   document.getElementById('weekly-export').onclick=e=>exportTable(e.target)
+   document.getElementById('weekly-print').onclick=e=>printTable(e.target)
+  }
+  async function open(id){const epoch=state.epoch,userId=state.user.id;const r=await request(studentUrl(id)+'?'+query());if(active(epoch,userId))formDialog(r)}
+  function formDialog(r){
+   dirty=false;const admin=state.user.role==='admin',s=r.snapshot
+   openDialog(dialogHead(admin?'查看本周记录':'填写本周记录',r.period.label)+`<div class="weekly-student"><h3>${h(s.name)} <small>${h(s.studentNo)}</small></h3><p>${h(s.college)} · ${h(s.gender)} · ${h(s.dorm)}</p><p>联系方式：${h(s.phone)||'未填写'}　辅导员：${h(s.counselorInfo)||h(r.counselorName)}</p><p>学生帮扶：${h(s.studentSupport)||'未填写'}</p></div><div class="talk-times"><span>首次保存：${h(time(r.createdAt))}</span><span>最后保存：${h(time(r.updatedAt))}</span><span>当前版本：${r.revision}</span></div><form id="weekly-form"><fieldset ${admin?'disabled':''}><div class="form-grid">${field('校区 *','campus',s.campus,'maxlength="100"')}${field('专业 *','major',s.major,'maxlength="150"')}</div>${!admin?'<label class="check-line"><input type="checkbox" name="syncProfile" '+(!r.id?'checked':'')+'>将校区、专业同步到学生档案，供后续周次使用</label>':''}<label class="weekly-textarea">本周心理状况 *<textarea name="psychologicalStatus" maxlength="2000" rows="7" placeholder="填写本周了解到的心理状况及跟进情况">${h(r.psychologicalStatus)}</textarea></label><label class="weekly-textarea">本周备注<textarea name="notes" maxlength="2000" rows="3" placeholder="补充本周需要记录的事项">${h(r.notes)}</textarea></label></fieldset><p class="muted small" id="weekly-save-state">${admin?'管理员查看模式，记录由负责辅导员维护。':'可先保存草稿；完成本周记录需填写校区、专业和心理状况。'}</p><div class="dialog-actions talk-actions">${button('关闭','weekly-cancel','ghost')}${button('往周记录','weekly-history')}${r.id?button('修改历史','weekly-versions'):''}${admin?'':button('保存草稿','weekly-draft')+'<button class="button primary" type="submit">保存本周记录</button>'}</div></form>`)
+   closeGuard();const form=document.getElementById('weekly-form')
+   if(!admin){
+    form.oninput=()=>{dirty=true;document.getElementById('weekly-save-state').textContent='有未保存修改。'}
+    async function save(status){const epoch=state.epoch,userId=state.user.id;const input={...Object.fromEntries(new FormData(form)),semesterId:r.period.semesterId,weekStart:r.period.weekStart,revision:r.revision,studentRevision:r.studentRevision,syncProfile:form.elements.syncProfile.checked,status};const buttons=[...form.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);try{const saved=await request(studentUrl(r.registryStudentId),json('POST',input));if(!active(epoch,userId))return;dirty=false;await page();if(state.page==='weekly'&&state.user?.id===userId&&modal.open)formDialog(saved);notice(status==='draft'?'草稿已保存':'本周记录已保存')}catch(e){notice(e.message,true)}finally{buttons.forEach(b=>b.disabled=false)}}
+    form.onsubmit=e=>{e.preventDefault();save('completed')};document.getElementById('weekly-draft').onclick=()=>save('draft')
+   }
+   const allow=()=>!dirty||confirm('查看历史前将放弃未保存修改，是否继续？')
+   document.getElementById('weekly-history').onclick=()=>{if(allow())history(r,false).catch(e=>notice(e.message,true))}
+   document.getElementById('weekly-versions')?.addEventListener('click',()=>{if(allow())history(r,true).catch(e=>notice(e.message,true))})
+  }
+  async function history(r,versions){
+   const epoch=state.epoch,userId=state.user.id;const data=await request(versions?'/weekly-ledgers/records/'+encodeURIComponent(r.id)+'/versions':studentUrl(r.registryStudentId)+'/history');if(!active(epoch,userId))return
+   dirty=false;openDialog(dialogHead(versions?'本周修改历史':'学生往周记录',h(r.snapshot.name)+' · 每次保存独立留存，可查看当时内容。')+`<div class="weekly-history">${data.map(v=>`<article><div class="weekly-history-heading"><h3>${versions?'版本 '+v.revision:'第 '+v.period.weekNumber+' 周'}</h3><span class="weekly-status ${v.status}">${labels[v.status]}</span></div><p class="muted small">${h(v.period.label)}<br>${h(time(v.savedAt||v.updatedAt))} · ${h(v.actorName||v.counselorName)}</p><p class="muted small">${h(v.snapshot.college)} · ${h(v.snapshot.campus)} · ${h(v.snapshot.major)}</p><h4>心理状况</h4><p class="weekly-full-text">${h(v.psychologicalStatus)||'尚未填写'}</p><h4>备注</h4><p class="weekly-full-text">${h(v.notes)||'无'}</p></article>`).join('')||'<p class="empty">暂无已保存的往周记录。</p>'}</div><div class="dialog-actions">${button('返回本周记录','weekly-back')}</div>`);closeGuard();document.getElementById('weekly-back').onclick=()=>formDialog(r)
+  }
+  function calendar(s){openDialog(dialogHead('教学周设置','第1周从周一开始。已有周记录的学期不能更改，以保持历史周次一致。')+`<form id="weekly-calendar-form"><p>${h(s.name)}</p>${field('第1教学周的周一','firstMonday',s.firstMonday,'type="date" required')}<div class="dialog-actions"><button class="button primary" type="submit">保存设置</button></div></form>`);const form=document.getElementById('weekly-calendar-form');form.onsubmit=busy(form,async()=>{await request('/weekly-ledgers/calendars/'+encodeURIComponent(s.id),json('PATCH',{firstMonday:form.elements.firstMonday.value}));modal.close();await page();notice('教学周设置已保存')})}
+  async function semestersPage(){
+   if(state.user.role!=='admin')throw new Error('仅管理员可管理学期')
+   const epoch=++state.epoch,userId=state.user.id
+   document.getElementById('content').innerHTML='<p class="loading">正在读取学期设置…</p>'
+   const meta=await request('/weekly-ledgers/options');if(!active(epoch,userId))return;metadata=meta
+   document.getElementById('content').innerHTML=heading('ACADEMIC CALENDAR','学期管理','按学校校历维护每个学期。新增后，所有辅导员都可在周台账中选择该学期。',button('＋ 新增学期','semester-new','primary'))+`${meta.demo?'<p class="weekly-calendar-warning">本地演示中的学期日期仅为示例，请按学校实际校历重新设置。</p>':''}<section class="panel semester-intro"><h2>每个学期，分别设置教学周</h2><p>填写学期名称、起止日期和第1教学周的周一。新学期可提前添加，到开学时再设为当前学期。切换当前学期保留以往的学生档案和周台账。</p></section><section class="panel"><div class="table-scroll"><table class="semester-table"><thead><tr><th>学期</th><th>起止日期</th><th>第1教学周的周一</th><th>状态</th><th>操作</th></tr></thead><tbody>${meta.semesters.map(s=>`<tr><td><strong>${h(s.name)}</strong><small class="cell-sub">${s.hasRecords?'已有周台账，校历已锁定':'尚无周台账，可调整校历'}</small></td><td>${h(s.startDate)} — ${h(s.endDate)}</td><td>${h(s.firstMonday)}<small class="cell-sub ${s.calendarConfigured?'':'warning'}">${s.calendarConfigured?'已设置':'尚未设置，当前按默认日期推算'}</small></td><td><span class="level-tag ${s.current?'':'inactive'}">${h(s.status)}</span></td><td><div class="actions"><button class="text-button" data-semester-edit="${h(s.id)}">${s.hasRecords?'查看设置':'编辑设置'}</button>${s.current?'':`<button class="text-button" data-semester-current="${h(s.id)}">设为当前学期</button>`}</div></td></tr>`).join('')||'<tr><td colspan="5"><div class="empty"><h3>尚未建立学期</h3><p>点击“新增学期”，根据学校校历填写。</p></div></td></tr>'}</tbody></table></div></section>`
+   document.getElementById('semester-new').onclick=()=>semesterDialog()
+   document.querySelectorAll('[data-semester-edit]').forEach(b=>b.onclick=()=>semesterDialog(meta.semesters.find(s=>s.id===b.dataset.semesterEdit)))
+   document.querySelectorAll('[data-semester-current]').forEach(b=>b.onclick=async()=>{
+    const s=meta.semesters.find(s=>s.id===b.dataset.semesterCurrent)
+    if(!confirm('将“'+s.name+'”设为当前学期？原当前学期将归档，历史档案和周台账继续保留。'))return
+    b.disabled=true;try{await request('/admin/semesters/'+encodeURIComponent(s.id)+'/current',json('PATCH',{}));if(!active(epoch,userId))return;filters.semesterId='';filters.weekStart='';await semestersPage();notice('当前学期已切换')}catch(e){notice(e.message,true)}finally{b.disabled=false}
+   })
+  }
+  function suggestedSemester(){
+   const latest=metadata?.semesters[0]?.name||'',match=/^(\d{4})-(\d{4})学年(第一|第二)学期$/.exec(latest)
+   return match?match[3]==='第一'?`${match[1]}-${match[2]}学年第二学期`:`${Number(match[1])+1}-${Number(match[2])+1}学年第一学期`:''
+  }
+  function semesterDialog(s){
+   dirty=false;const locked=!!s?.hasRecords,canSave=!locked||!s.calendarConfigured,ro=locked?'readonly':''
+   openDialog(dialogHead(s?'学期设置':'新增学期',locked?'该学期已有周台账，学期名称和日期已锁定；可确认现有教学周起点，不能改变历史周次。':'请按学校校历填写。系统不预设新学期的开学日期和教学周。')+`<form id="semester-form">${field('学期名称 *','name',s?.name||suggestedSemester(),'required maxlength="160" placeholder="例如：2026-2027学年第二学期" '+ro)}<div class="form-grid">${field('学期开始日期 *','startDate',s?.startDate||'','type="date" required '+ro)}${field('学期结束日期 *','endDate',s?.endDate||'','type="date" required '+ro)}${field('第1教学周的周一 *','firstMonday',s?.firstMonday||'','type="date" required '+ro)}</div><p class="muted small">第1教学周须从周一开始，可与报到日期不同。新建学期默认“未开始”，不会自动替换当前学期。</p><div class="dialog-actions">${button('取消','weekly-cancel','ghost')}${canSave?'<button class="button primary" type="submit">'+(locked?'确认现有教学周':s?'保存设置':'创建学期')+'</button>':''}</div></form>`)
+   closeGuard();const form=document.getElementById('semester-form');form.oninput=()=>{dirty=true}
+   if(canSave)form.onsubmit=busy(form,async()=>{
+    const epoch=state.epoch,userId=state.user.id
+    await request('/admin/semesters'+(s?'/'+encodeURIComponent(s.id):''),json(s?'PATCH':'POST',Object.fromEntries(new FormData(form))))
+    if(!active(epoch,userId))return;dirty=false;modal.close();await semestersPage();notice(s?'学期设置已保存':'学期已创建，辅导员现在可以选择该学期')
+   })
+  }
+  const exportFilters=()=>({...filters,includeIncomplete})
+  async function exportTable(b){b.disabled=true;const epoch=state.epoch,userId=state.user.id;try{const blob=await request('/weekly-ledgers/export',{...json('POST',exportFilters()),binary:true});if(!active(epoch,userId))return;const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='严重心理问题学生周台账表-'+period.weekStart+'.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);notice('周台账 Excel 已导出')}catch(e){notice(e.message,true)}finally{b.disabled=false}}
+  function printMarkup(data){return `<h1>严重心理问题学生周台账表</h1><p>${h(data.period.label)}</p><table><colgroup>${[4,7,5,5,4,7,8,6,11,12,19,12].map(w=>`<col style="width:${w}%">`).join('')}</colgroup><thead><tr>${data.headers.map(t=>`<th>${h(t)}</th>`).join('')}</tr></thead><tbody>${data.rows.map((r,i)=>{const s=r.snapshot;return '<tr>'+[i+1,s.college,s.campus,s.name,s.gender,s.major,s.phone,s.dorm,s.counselorInfo,s.studentSupport,r.psychologicalStatus+(r.status==='completed'?'':'\n（'+labels[r.status]+'）'),r.notes].map(v=>`<td>${h(v)}</td>`).join('')+'</tr>'}).join('')}</tbody></table>`}
+  async function printTable(b){b.disabled=true;const epoch=state.epoch,userId=state.user.id;try{const data=await request('/weekly-ledgers/print',json('POST',exportFilters()));if(!active(epoch,userId))return;const markup=printMarkup(data);document.getElementById('print-sheet').innerHTML=markup;openDialog(dialogHead('周台账打印预览','A4 横向，按学校原表12列打印。可在打印窗口选择“另存为 PDF”。')+`<div class="weekly-print-preview">${markup}</div><div class="dialog-actions">${button('打印 / 保存 PDF','weekly-print-now','primary')}</div>`);document.getElementById('weekly-print-now').onclick=()=>window.print()}catch(e){notice(e.message,true)}finally{b.disabled=false}}
+  return {page,open,cleanup,semestersPage}
+ }
+})()

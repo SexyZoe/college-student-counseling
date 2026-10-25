@@ -1,6 +1,7 @@
 const crypto = require("node:crypto")
 const { HttpError } = require("./errors")
 const { inTransaction } = require("./database")
+const { semesterInput, validateFirstMonday, monday:semesterMonday } = require("./academic-calendar")
 const {
   normalizeAccountId,
   createPasswordRecordAsync,
@@ -17,6 +18,10 @@ const { createMediaServices } = require("./media-service")
 const { createCounselorAdminServices } = require("./counselor-admin-service")
 const { createRegistryServices } = require("./registry-service")
 const { createTalkServices } = require("./talk-service")
+const { createWeeklyServices } = require("./weekly-service")
+const { createCommitteeServices } = require("./committee-service")
+const { createGradeApplicationServices } = require("./grade-application-service")
+const { createHolidayServices } = require("./holiday-service")
 const scoringEngine = require("../../utils/scoring-engine")
 const assessmentCatalog = require("../../shared/assessments.json")
 const faqCatalog = require("../../shared/faq.json")
@@ -527,28 +532,54 @@ function createServices(database, config, options) {
 
   async function createSemester(user, input) {
     requireRole(user, "admin")
-    const name = String(input.name || "").trim()
-    const startDate = validDate(input.startDate, "startDate")
-    const endDate = validDate(input.endDate, "endDate")
-    if (!name) throw new HttpError(422, "INVALID_SEMESTER", "学期名称不能为空")
-    if (startDate > endDate) throw new HttpError(422, "INVALID_SEMESTER", "结束日期不能早于开始日期")
+    const {name,startDate,endDate,firstMonday}=semesterInput(input)
     const id = String(input.id || "semester-" + crypto.randomUUID()).trim()
-    try {
-      await database.prepare("INSERT INTO semesters (id, name, start_date, end_date, status, created_at) VALUES (?, ?, ?, ?, '未开始', ?)")
-        .run(id, name, startDate, endDate, nowIso())
-    } catch (error) {
-      throw new HttpError(409, "SEMESTER_EXISTS", "学期编号或名称已存在")
-    }
-    await audit(user.id, "创建学期", "semester", id, { name: name })
-    return mapSemester(await database.prepare("SELECT * FROM semesters WHERE id = ?").get(id))
+    if(!/^[a-zA-Z0-9_-]{1,64}$/.test(id))throw new HttpError(422,'INVALID_SEMESTER','学期编号须为64位以内的字母、数字、短横线或下划线')
+    return inTransaction(database,async()=>{
+      try {
+        await database.prepare("INSERT INTO semesters (id, name, start_date, end_date, status, created_at) VALUES (?, ?, ?, ?, '未开始', ?)")
+          .run(id, name, startDate, endDate, nowIso())
+      } catch (error) {
+        if(error.code==='ER_DUP_ENTRY'||/UNIQUE constraint failed/.test(error.message))throw new HttpError(409, "SEMESTER_EXISTS", "学期编号或名称已存在")
+        throw error
+      }
+      if(firstMonday)await database.prepare('INSERT INTO weekly_calendars(semester_id,first_monday,updated_at) VALUES(?,?,?)').run(id,firstMonday,nowIso())
+      await audit(user.id, "创建学期", "semester", id, { name,firstMonday })
+      return mapSemester(await database.prepare("SELECT * FROM semesters WHERE id = ?").get(id))
+    })
+  }
+
+  async function updateSemester(user,semesterId,input){
+    requireRole(user,'admin')
+    const value=semesterInput(input)
+    return inTransaction(database,async()=>{
+      const existing=await database.prepare('SELECT * FROM semesters WHERE id=?'+(database.dialect==='mysql'?' FOR UPDATE':'')).get(semesterId)
+      if(!existing)throw new HttpError(404,'SEMESTER_NOT_FOUND','学期不存在')
+      const oldCalendar=await database.prepare('SELECT first_monday FROM weekly_calendars WHERE semester_id=?').get(semesterId)
+      const firstMonday=value.firstMonday||oldCalendar?.first_monday||semesterMonday(existing.start_date)
+      validateFirstMonday(firstMonday,value.startDate,value.endDate)
+      const changed=existing.name!==value.name||existing.start_date!==value.startDate||existing.end_date!==value.endDate||firstMonday!==(oldCalendar?.first_monday||semesterMonday(existing.start_date))
+      if(changed&&await database.prepare('SELECT id FROM weekly_records WHERE semester_id=? LIMIT 1').get(semesterId))throw new HttpError(409,'SEMESTER_USED','该学期已有周台账，不能更改学期名称、日期或教学周，历史记录保持不变')
+      try{await database.prepare('UPDATE semesters SET name=?,start_date=?,end_date=? WHERE id=?').run(value.name,value.startDate,value.endDate,semesterId)}catch(error){
+        if(error.code==='ER_DUP_ENTRY'||/UNIQUE constraint failed/.test(error.message))throw new HttpError(409,'SEMESTER_EXISTS','学期名称已存在')
+        throw error
+      }
+      if(value.firstMonday){
+        if(oldCalendar)await database.prepare('UPDATE weekly_calendars SET first_monday=?,updated_at=? WHERE semester_id=?').run(firstMonday,nowIso(),semesterId)
+        else await database.prepare('INSERT INTO weekly_calendars(semester_id,first_monday,updated_at) VALUES(?,?,?)').run(semesterId,firstMonday,nowIso())
+      }
+      await audit(user.id,'修改学期设置','semester',semesterId,{name:value.name,firstMonday:value.firstMonday})
+      return mapSemester(await database.prepare('SELECT * FROM semesters WHERE id=?').get(semesterId))
+    })
   }
 
   async function setCurrentSemester(user, semesterId) {
     requireRole(user, "admin")
-    const target = await database.prepare("SELECT * FROM semesters WHERE id = ?").get(semesterId)
-    if (!target) throw new HttpError(404, "SEMESTER_NOT_FOUND", "学期不存在")
-    const previous = await currentSemester()
     await inTransaction(database, async function() {
+      if(database.dialect==='mysql')await database.prepare('SELECT id FROM semesters ORDER BY id FOR UPDATE').all()
+      const target = await database.prepare("SELECT * FROM semesters WHERE id = ?").get(semesterId)
+      if (!target) throw new HttpError(404, "SEMESTER_NOT_FOUND", "学期不存在")
+      const previous = await currentSemester()
       await database.prepare("UPDATE semesters SET status = '已归档' WHERE status = '当前学期' AND id <> ?").run(semesterId)
       await database.prepare("UPDATE semesters SET status = '当前学期' WHERE id = ?").run(semesterId)
       await audit(user.id, "切换当前学期", "semester", semesterId, { previousSemesterId: previous ? previous.id : "" })
@@ -837,6 +868,10 @@ function createServices(database, config, options) {
   const registryServices = createRegistryServices(database, { requireRole, audit, nowIso, dataProtector })
   return {
     ...registryServices,
+    ...createWeeklyServices(database, { demoMode:config.weeklyPreview===true, requireRole, audit, nowIso, dataProtector, listRegistryStudents:registryServices.listRegistryStudents, getRegistryStudent:registryServices.getRegistryStudent }),
+    ...createCommitteeServices(database, { config, requireRole, audit, nowIso, dataProtector }),
+    ...createGradeApplicationServices(database, config, { requireRole, audit, nowIso, dataProtector, getRegistryStudent:registryServices.getRegistryStudent }),
+    ...createHolidayServices(database, config, { requireRole, audit, nowIso, dataProtector, getRegistryStudent:registryServices.getRegistryStudent, listRegistryStudents:registryServices.listRegistryStudents }),
     ...createTalkServices(database, config, { requireRole, audit, nowIso, dataProtector, getRegistryStudent:registryServices.getRegistryStudent }),
     ...counselorAdministration,
     ...createStudentAccountServices(database, { requireRole, publicUser, audit, nowIso, dataProtector }),
@@ -858,6 +893,7 @@ function createServices(database, config, options) {
     getStudentSupportSummary,
     listSemesters,
     createSemester,
+    updateSemester,
     setCurrentSemester,
     createCounselorAssignment,
     revokeCounselorAssignment,

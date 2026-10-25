@@ -63,6 +63,7 @@ async function main(){
   assert.equal((await pdfGeometry(pdf)).pages,1)
   const legacyWord=await ok('/talk-records/'+record.id+'/document?format=doc',admin,'GET',null,200,true)
   assert.equal(legacyWord.subarray(0,8).toString('hex'),'d0cf11e0a1b11ae1')
+  await require('./forms-contract-test').verifyForms({admin,one,two,suffix,base,ok,request})
   console.log('PASS: staff-only auth, first-login password change, self profile, owner isolation, registry history/import/export/print, independent talk save/retry/edit, administrator access, selected-only original-form DOCX/PDF/DOC')
  }finally{for(const token of sessions)await request('/auth/logout',token,'POST',{}).catch(()=>{})}
 }

@@ -1,0 +1,10 @@
+{
+  "sourceFile": "信息与人工智能学院心理库学生离校统计表9.30.xlsx",
+  "sourceSha256": "62e97b26742922cc4041d19ba3c4ad295a961e73fe3b0f5a21bb984611f0be77",
+  "sha256": "e13c8d0bb645ebc3b069bac0c5ffcc1e6729d7f9299f877fbc7d8baadf27aed1",
+  "columns": 22,
+  "dailySlots": 8,
+  "headerHeight": 114,
+  "bodyHeight": 154.05,
+  "notes": "原表表头、字体、列宽、边框保留；样本学生、截图、公式和隐藏图片目录全部移除。日期按所选区间更新，每8日一张同格式工作表。"
+}

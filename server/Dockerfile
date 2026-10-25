@@ -50,8 +50,10 @@ RUN --mount=type=bind,from=document-packages,target=/packages \
     && if [ -f /packages/.ready ]; then \
       apk add --no-network /packages/*.apk; \
     else \
-      apk add --no-cache libreoffice-writer font-noto-cjk font-dejavu; \
+      apk add --no-cache libreoffice-writer libreoffice-calc poppler-utils font-noto-cjk font-dejavu; \
     fi \
+    && test -x /usr/bin/pdftoppm \
+    && apk info -e libreoffice-calc >/dev/null \
     && mkdir -p /app/data /app/data/uploads /app/backups \
     && chown -R node:node /app \
     && rm -rf /usr/local/lib/node_modules/npm \

@@ -58,9 +58,11 @@ test('学生登记闭环：权限、档案、月度历史、导入导出与打�
   assert.equal((await req('/registry/students/'+saved.id,first,'PATCH',saved)).status,409)
   saved=r.data.data
  })
- await t.test('管理员可汇总、按辅导员筛选并为指定辅导员登记',async()=>{
+ await t.test('管理员可汇总与筛选，但不能代为登记或修改',async()=>{
   assert.equal((await req('/registry/students',admin)).data.data.length,1)
-  const r=await req('/registry/students',admin,'POST',student('另一位学生',{counselorId:secondId,studentNo:'000002'}));assert.equal(r.status,201)
+  assert.equal((await req('/registry/students',admin,'POST',student('另一位学生',{counselorId:secondId,studentNo:'000002'}))).status,403)
+  assert.equal((await req('/registry/students/'+saved.id,admin,'PATCH',saved)).status,403)
+  const r=await req('/registry/students',second,'POST',student('另一位学生',{studentNo:'000002'}));assert.equal(r.status,201)
   assert.equal((await req('/registry/students?counselorId='+secondId,admin)).data.data.length,1)
   assert.equal((await req('/registry/students?q=另一位',admin)).data.data.length,1)
   assert.equal((await req('/registry/students?month=2026-11&level='+encodeURIComponent('二级'),admin)).data.data.length,1)
